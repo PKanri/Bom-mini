@@ -80,7 +80,12 @@ async function cloudLoad() {
     rows.forEach(r=>docs.set(r.id,r));if(rows.length<500)break;
   }
   if(bomCloud.member.role==='branch') {
-    try {bomCloud.coverage=await cloudRequest('/rest/v1/rpc/bom_import_coverage',{method:'POST',body:'{}'});}
+    try {
+      for(let offset=0;;offset+=500) {
+        const rows=await cloudRequest(`/rest/v1/rpc/bom_import_coverage?order=kind,period,start_date,end_date,quantity_field&limit=500&offset=${offset}`,{method:'POST',body:'{}'});
+        bomCloud.coverage.push(...rows);if(rows.length<500)break;
+      }
+    }
     catch {coverageWarning=' · ยังตรวจสถานะไฟล์ส่วนกลางไม่ได้ ให้ผู้ดูแลรัน supabase-branch-coverage.sql แล้วโหลดใหม่';}
   }
   bomCloud.baseline=docs;cloudRestore(docs);workflowReady=true;
@@ -162,8 +167,10 @@ function cloudAuthView(unlocked) {
   $w('cloudLogin').hidden=unlocked;
   $w('cloudGate').hidden=unlocked;
   $w('cloudActions').hidden=!unlocked;
+  $w('cloudActions').open=false;
   $w('cloudAccount').textContent=unlocked
     ? `${bomCloud.session.user.email} · ${bomCloud.member.role==='admin'?'ส่วนกลาง / ผู้ดูแลระบบ':'สาขา '+bomCloud.member.branch}` : '';
+  $w('cloudAccount').title=$w('cloudAccount').textContent;
 }
 function cloudClearSession() {
   try {sessionStorage.removeItem(cloudSessionKey);} catch { /* Storage may be disabled. */ }
