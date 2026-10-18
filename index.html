@@ -278,17 +278,16 @@
         <p class="text-sm text-slate-600">ลบข้อมูลยอดขาย รับเข้า จ่ายออก เครื่องดื่ม และยอดนับของทุกสาขา โดยคงสูตร BOM ไว้ โหมดเดือน/ปีเก็บยอดนับวันสุดท้ายเป็นยอดยกมา ส่วนโหมดช่วงวันที่ลบทุกวันที่เลือก รวมวันสิ้นสุด และคงข้อมูลนอกช่วง</p>
         <div class="flex flex-wrap gap-3 items-center">
           <label>รูปแบบ <select id="cleanupMode" onchange="resetCleanupPreview()" class="border rounded-lg p-2"><option value="period">เดือน / ปี (เก็บยอดนับวันสุดท้าย)</option><option value="range">ช่วงวันที่ (ลบทุกวันในช่วง)</option></select></label>
-          <label>ตั้งแต่วันที่ <input id="cleanupStart" type="date" onchange="resetCleanupPreview()" class="border rounded-lg p-2"></label>
-          <label>ถึงวันที่ <input id="cleanupEnd" type="date" onchange="resetCleanupPreview()" class="border rounded-lg p-2"></label>
-          <label for="cleanupPeriod">เดือนหรือปี (ค.ศ.)</label>
-          <select id="cleanupPeriod" onchange="resetCleanupPreview()" class="border rounded-lg p-2"><option value="">รอโหลดข้อมูล</option></select>
+          <label id="cleanupStartField" hidden>ตั้งแต่วันที่ <input id="cleanupStart" type="date" disabled onchange="resetCleanupPreview()" class="border rounded-lg p-2"></label>
+          <label id="cleanupEndField" hidden>ถึงวันที่ <input id="cleanupEnd" type="date" disabled onchange="resetCleanupPreview()" class="border rounded-lg p-2"></label>
+          <label id="cleanupPeriodField">เดือนหรือปี (ค.ศ.) <select id="cleanupPeriod" onchange="resetCleanupPreview()" class="border rounded-lg p-2"><option value="">รอโหลดข้อมูล</option></select></label>
           <button onclick="prepareCleanup()" class="border rounded-lg px-3 py-2">ตรวจข้อมูลก่อนลบ</button>
         </div>
         <div id="cleanupPreview" class="text-sm bg-slate-50 p-3 rounded-lg" role="status" aria-live="polite">เลือกช่วง แล้วกดตรวจข้อมูลก่อนลบ</div>
         <button id="cleanupBackup" onclick="downloadCleanupBackup()" disabled class="border rounded-lg px-3 py-2 disabled:opacity-40">1. ดาวน์โหลดสำรอง JSON</button>
         <p class="text-xs text-slate-500">ไฟล์สำรองเก็บข้อมูลแถวที่จะลบและยอดยกมาที่คงไว้ สำหรับกู้คืนโดยผู้ดูแล ควรเก็บไฟล์นี้ให้ปลอดภัย</p>
         <label class="block text-sm"><input id="cleanupBackupConfirmed" type="checkbox" disabled onchange="updateCleanupConfirmation()"> ดาวน์โหลดและเก็บไฟล์สำรองเรียบร้อยแล้ว</label>
-        <label class="block text-sm">2. พิมพ์ช่วงที่เลือกเพื่อยืนยัน เช่น 2026-09 หรือ 2025 <input id="cleanupConfirmText" type="text" autocomplete="off" oninput="updateCleanupConfirmation()" class="border rounded-lg p-2"></label>
+        <label class="block text-sm"><span id="cleanupConfirmHint">2. พิมพ์ช่วงที่เลือกเพื่อยืนยัน เช่น 2026-09 หรือ 2025</span> <input id="cleanupConfirmText" type="text" autocomplete="off" oninput="updateCleanupConfirmation()" class="border rounded-lg p-2 w-full sm:w-80"></label>
         <button id="cleanupDelete" onclick="deleteCleanupPeriod()" disabled class="bg-rose-600 text-white rounded-lg px-4 py-2 disabled:opacity-40">3. ยืนยันลบจาก Supabase</button>
       </details>
       <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
