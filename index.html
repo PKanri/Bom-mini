@@ -7,6 +7,7 @@
   <script src="https://www.gstatic.com/antigravity/web/dev/tailwindcss.min.js"></script>
   <style>
     [hidden] { display: none !important; }
+    body:not(.auth-locked) #cloudLoginPanel { display: none; }
     body.auth-locked section.tab-content { display: none !important; }
     .stock-in { color:#059669; }
     .stock-out { color:#e11d48; }
@@ -38,7 +39,7 @@
   <!-- TOP NAVIGATION HEADER -->
   <header class="bg-[var(--card,#ffffff)] border-b border-[var(--border,#e2e8f0)] sticky top-0 z-30 shadow-xs">
     <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-      <div class="flex items-center justify-between h-16">
+      <div class="flex flex-wrap items-center justify-between gap-3 py-3">
         <!-- Logo & Title -->
         <div class="flex items-center gap-3">
           <div class="w-10 h-10 rounded-xl bg-emerald-600 flex items-center justify-center text-white shadow-sm font-bold text-lg">
@@ -53,6 +54,17 @@
           </div>
         </div>
 
+        <details id="cloudActions" hidden class="relative ml-auto text-xs text-slate-600">
+          <summary class="cursor-pointer rounded-lg px-3 py-2 hover:bg-slate-50 flex items-center gap-2" aria-label="เมนูบัญชีผู้ใช้">
+            <span class="h-2 w-2 rounded-full bg-emerald-500" aria-hidden="true"></span>
+            <span id="cloudAccount" class="max-w-[220px] truncate"></span><span aria-hidden="true">▾</span>
+          </summary>
+          <div class="absolute right-0 top-full mt-2 w-64 max-w-[85vw] rounded-xl border border-slate-200 bg-white shadow-lg p-2 z-50">
+            <button onclick="cloudReload()" class="block w-full text-left rounded-lg px-3 py-2 hover:bg-slate-50">โหลดข้อมูลล่าสุด</button>
+            <button id="cloudMigrate" onclick="cloudMigrateLocal()" class="block w-full text-left rounded-lg px-3 py-2 hover:bg-slate-50" hidden>ย้ายข้อมูลเดิมจากเครื่องนี้</button>
+            <button onclick="cloudSignOut()" class="block w-full text-left rounded-lg px-3 py-2 text-rose-600 hover:bg-rose-50">ออกจากระบบ</button>
+          </div>
+        </details>
       </div>
 
       <!-- MAIN MODULE TABS -->
@@ -76,8 +88,8 @@
   <!-- MAIN APP CONTAINER -->
   <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
     <p id="workflowStorage" class="text-xs text-slate-600 mb-4">กำลังเปิดข้อมูลที่บันทึกไว้…</p>
-    <div class="bg-white border border-emerald-200 rounded-xl p-4 mb-5 space-y-3">
-      <strong>ฐานข้อมูล Supabase</strong>
+    <div id="cloudLoginPanel" class="bg-white border border-emerald-200 rounded-xl p-4 mb-5 space-y-3">
+      <strong>เข้าสู่ระบบ</strong>
       <p id="cloudMessage" class="text-sm" role="status" aria-live="polite">กำลังเชื่อมต่อฐานข้อมูล…</p>
       <p id="cloudGate" class="text-sm">เข้าสู่ระบบด้วยบัญชีที่ส่วนกลางจัดให้ หากยังไม่มีบัญชีหรือลืมรหัสผ่าน กรุณาติดต่อผู้ดูแลระบบ</p>
       <form id="cloudLogin" onsubmit="event.preventDefault();cloudSignIn()" class="max-w-sm space-y-3">
@@ -85,12 +97,6 @@
         <label class="block">รหัสผ่าน<input id="cloudPassword" type="password" autocomplete="current-password" required class="block border rounded px-3 py-2 w-full"></label>
         <button id="cloudSignInButton" type="submit" class="bg-emerald-600 text-white rounded px-4 py-2">เข้าสู่ระบบ</button>
       </form>
-      <div id="cloudActions" hidden>
-        <p id="cloudAccount" class="text-sm mb-3"></p>
-        <button onclick="cloudReload()" class="border rounded px-3 py-2">โหลดข้อมูลล่าสุด</button>
-        <button id="cloudMigrate" onclick="cloudMigrateLocal()" class="border rounded px-3 py-2" hidden>ย้ายข้อมูลเดิมจากเครื่องนี้</button>
-        <button onclick="cloudSignOut()" class="border rounded px-3 py-2">ออกจากระบบ</button>
-      </div>
     </div>
 
     <!-- ==================================================================== -->
@@ -268,9 +274,12 @@
 
       <!-- Import Type Selector & Upload Box -->
       <details class="bg-white border border-rose-200 rounded-2xl p-5 space-y-3">
-        <summary class="font-bold text-rose-700 cursor-pointer">จัดการข้อมูลย้อนหลัง — ลบตามเดือน / ปี</summary>
-        <p class="text-sm text-slate-600">ลบข้อมูลยอดขาย รับเข้า จ่ายออก เครื่องดื่ม และยอดนับรายวันของทุกสาขาในช่วงที่เลือก โดยเก็บสูตร BOM และยอดนับวันสุดท้ายของช่วงไว้เป็นยอดยกมา</p>
+        <summary class="font-bold text-rose-700 cursor-pointer">จัดการข้อมูลย้อนหลัง — ลบตามเดือน / ปี / ช่วงวันที่</summary>
+        <p class="text-sm text-slate-600">ลบข้อมูลยอดขาย รับเข้า จ่ายออก เครื่องดื่ม และยอดนับของทุกสาขา โดยคงสูตร BOM ไว้ โหมดเดือน/ปีเก็บยอดนับวันสุดท้ายเป็นยอดยกมา ส่วนโหมดช่วงวันที่ลบทุกวันที่เลือก รวมวันสิ้นสุด และคงข้อมูลนอกช่วง</p>
         <div class="flex flex-wrap gap-3 items-center">
+          <label>รูปแบบ <select id="cleanupMode" onchange="resetCleanupPreview()" class="border rounded-lg p-2"><option value="period">เดือน / ปี (เก็บยอดนับวันสุดท้าย)</option><option value="range">ช่วงวันที่ (ลบทุกวันในช่วง)</option></select></label>
+          <label>ตั้งแต่วันที่ <input id="cleanupStart" type="date" onchange="resetCleanupPreview()" class="border rounded-lg p-2"></label>
+          <label>ถึงวันที่ <input id="cleanupEnd" type="date" onchange="resetCleanupPreview()" class="border rounded-lg p-2"></label>
           <label for="cleanupPeriod">เดือนหรือปี (ค.ศ.)</label>
           <select id="cleanupPeriod" onchange="resetCleanupPreview()" class="border rounded-lg p-2"><option value="">รอโหลดข้อมูล</option></select>
           <button onclick="prepareCleanup()" class="border rounded-lg px-3 py-2">ตรวจข้อมูลก่อนลบ</button>
