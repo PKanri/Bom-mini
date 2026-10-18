@@ -1,5 +1,9 @@
 'use strict';
-// Tokens remain in memory. Reloading or signing out requires a fresh login.
+// Remember tokens in this tab only; never store the password or membership.
+const cloudSessionKey='bom-session:'+BOM_SUPABASE.url;
+function cloudRememberSession() {
+  try {sessionStorage.setItem(cloudSessionKey,JSON.stringify(bomCloud.session));} catch { /* Storage may be disabled. */ }
+}
 const bomCloud = { session:null, member:null, coverage:[], baseline:new Map(), initializing:false, busy:false, queue:Promise.resolve() };
 function cloudStatus(message) { $w('workflowStorage').textContent=message; $w('cloudMessage').textContent=message; }
 async function cloudRequest(path, options={}, authenticated=true) {
@@ -7,6 +11,7 @@ async function cloudRequest(path, options={}, authenticated=true) {
   if(authenticated && Date.now()>bomCloud.session.expiresAt-60000) {
     const fresh=await cloudRequest('/auth/v1/token?grant_type=refresh_token',{method:'POST',body:JSON.stringify({refresh_token:bomCloud.session.refresh_token})},false);
     bomCloud.session={...fresh,expiresAt:Date.now()+fresh.expires_in*1000};
+    cloudRememberSession();
   }
   const response=await fetch(BOM_SUPABASE.url+path,{...options,headers:{apikey:BOM_SUPABASE.publishableKey,'Content-Type':'application/json',
     ...(authenticated?{Authorization:'Bearer '+bomCloud.session.access_token}:{}),...options.headers}});
@@ -129,8 +134,27 @@ async function cloudMigrateLocal() {
   }catch(error){cloudStatus(error.message);}finally{bomCloud.busy=false;}
 }
 async function initializeCloudUI() {
+  let saved=null;
+  try {saved=JSON.parse(sessionStorage.getItem(cloudSessionKey));} catch { /* No usable saved session. */ }
   cloudClearSession();
   cloudStatus('กรุณาเข้าสู่ระบบเพื่อเปิดข้อมูล');
+  if(!saved?.access_token||!saved?.refresh_token||!Number.isFinite(saved.expiresAt))return;
+  bomCloud.busy=true;$w('cloudSignInButton').disabled=true;
+  cloudStatus('กำลังตรวจสอบการเข้าสู่ระบบ…');
+  try {
+    bomCloud.session=saved;
+    const user=await cloudRequest('/auth/v1/user');
+    bomCloud.session.user=user;
+    await cloudLoadMembership(user.id);
+    await cloudLoad();cloudRememberSession();cloudAuthView(true);
+  } catch(error) {
+    cloudClearSession();cloudStatus('เข้าสู่ระบบต่อไม่สำเร็จ กรุณาเข้าสู่ระบบใหม่: '+error.message);
+  } finally {bomCloud.busy=false;$w('cloudSignInButton').disabled=false;}
+}
+async function cloudLoadMembership(userId) {
+  const members=await cloudRequest('/rest/v1/bom_members?select=role,branch&user_id=eq.'+encodeURIComponent(userId));
+  if(members.length!==1||!['admin','branch'].includes(members[0].role))throw Error('บัญชีนี้ยังไม่ได้รับสิทธิ์ใช้งาน กรุณาติดต่อส่วนกลาง');
+  bomCloud.member=members[0];
 }
 function cloudAuthView(unlocked) {
   document.body.classList.toggle('auth-locked',!unlocked);
@@ -142,6 +166,7 @@ function cloudAuthView(unlocked) {
     ? `${bomCloud.session.user.email} · ${bomCloud.member.role==='admin'?'ส่วนกลาง / ผู้ดูแลระบบ':'สาขา '+bomCloud.member.branch}` : '';
 }
 function cloudClearSession() {
+  try {sessionStorage.removeItem(cloudSessionKey);} catch { /* Storage may be disabled. */ }
   bomCloud.session=null;bomCloud.member=null;bomCloud.coverage=[];bomCloud.baseline=new Map();workflowReady=false;
   workflow={version:1,settings:{},branches:{},batches:{},counts:{}};
   appState.materials=[];appState.recipes=[];appState.selectedMenuId=null;
@@ -159,10 +184,8 @@ async function cloudSignIn() {
       method:'POST',body:JSON.stringify({email:$w('cloudEmail').value.trim(),password:$w('cloudPassword').value})
     },false);
     bomCloud.session={...session,expiresAt:Date.now()+session.expires_in*1000};
-    const members=await cloudRequest('/rest/v1/bom_members?select=role,branch&user_id=eq.'+encodeURIComponent(session.user.id));
-    if(members.length!==1||!['admin','branch'].includes(members[0].role))throw Error('บัญชีนี้ยังไม่ได้รับสิทธิ์ใช้งาน กรุณาติดต่อส่วนกลาง');
-    bomCloud.member=members[0];
-    await cloudLoad();cloudAuthView(true);
+    await cloudLoadMembership(session.user.id);
+    await cloudLoad();cloudRememberSession();cloudAuthView(true);
   } catch(error) {
     cloudClearSession();
     cloudStatus(/Invalid login credentials/i.test(error.message)?'อีเมลหรือรหัสผ่านไม่ถูกต้อง':'เข้าสู่ระบบไม่สำเร็จ: '+error.message);
