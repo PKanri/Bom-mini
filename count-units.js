@@ -123,6 +123,29 @@ function renderStockCountTable() {
   $w('countSaveStatus').textContent=branch?`สาขา ${workflow.branches[branch]} · ${date} · ${savedItems?'มีข้อมูลบันทึกแล้ว '+savedItems+' รายการ':'ยังไม่มีข้อมูลบันทึกของวันนี้'}${countDrafts[activeCountScope]?' · กำลังแสดงฉบับร่างในหน้านี้':''} · ว่าง = ยังไม่ได้นับ / 0 = นับแล้วไม่เหลือ`:'เลือกสาขาก่อนกรอกยอดตรวจนับ';
   filterStockCountRows();
 }
+function countAnomalyWarnings(branch,date,next,previous,entries) {
+  const warnings=[];
+  const dates=Object.keys(workflow.counts).filter(k=>k.startsWith(branch+':')&&k.slice(branch.length+1)<date).sort().reverse();
+  for(const [code,s] of entries) {
+    const c=next[code],old=previous[code],units=countUnits(s,code),main=units[0];
+    const name=s.name+' ('+code+')';
+    if(old?.qty!=null&&!old.unitReview&&c?.qty==null){warnings.push(name+': ล้างยอดที่เคยบันทึกเป็น “ยังไม่ได้นับ”');continue;}
+    if(c?.qty==null)continue;
+    if(old?.qty===c.qty&&old?.waste===c.waste)continue;
+    let ref=old?.qty!=null&&!old.unitReview?{value:old,date:date+' (ก่อนแก้ไข)'}:null;
+    if(!ref)for(const k of dates){const v=workflow.counts[k][code];if(v?.qty!=null&&!v.unitReview){ref={value:v,date:k.slice(branch.length+1)};break;}}
+    const reasons=[];
+    if(ref&&Number.isFinite(ref.value.qty)) {
+      const before=ref.value.qty,diff=c.qty-before;
+      if(before>0&&Math.abs(diff)>=main.factor&&(diff/before>=1||diff/before<=-0.75))reasons.push(`ยอด ${fmt(before/main.factor)} → ${fmt(c.qty/main.factor)} ${main.label} (${diff>0?'+':''}${fmt(diff/before*100)}%) เทียบ ${ref.date}`);
+      else if(before===0&&c.qty>=10*main.factor)reasons.push(`จาก 0 เป็น ${fmt(c.qty/main.factor)} ${main.label} เทียบ ${ref.date}`);
+    }
+    if(c.waste>0&&c.waste>c.qty)reasons.push('จำนวนสูญเสียมากกว่ายอดคงเหลือ กรุณาตรวจหน่วย');
+    for(const u of (c.unitInputs||[]).slice(1))if(u.factor<main.factor&&Number(u.value)*u.factor>=main.factor)reasons.push(`ช่องเศษ ${fmt(Number(u.value))} ${u.label} มีปริมาณตั้งแต่ 1 ${main.label} ขึ้นไป ตรวจว่าไม่ได้นับซ้ำกับหน่วยหลัก`);
+    if(reasons.length)warnings.push(name+': '+reasons.join(' / '));
+  }
+  return warnings;
+}
 async function savePhysicalStockCount() {
   const branch=$w('stockCountBranchInput').value,date=$w('stockCountDateInput').value;
   if(!branch||!date||!criticalEntries().length){alert('เลือกสาขา วันที่ และวัตถุดิบก่อนบันทึก');return;}
@@ -143,7 +166,11 @@ async function savePhysicalStockCount() {
     if(unitInputs.some(u=>!Number.isFinite(Number(u.value))||Number(u.value)<0)||!Number.isFinite(Number(loss))||Number(loss)<0||!lossFactor){alert('จำนวนต้องเป็นตัวเลขตั้งแต่ 0 ขึ้นไป และเลือกหน่วยสูญเสีย');return;}
     next[code]={...(previous[code]?.receiptQty!=null?{receipt:previous[code].receipt,receiptUnit:previous[code].receiptUnit,receiptQty:previous[code].receiptQty}:{}),qty:unitInputs.reduce((sum,u)=>sum+Number(u.value)*u.factor,0),unitInputs,loss,lossUnit,waste:Number(loss)*lossFactor,remarks:$w('count-note-'+i).value,updatedAt:new Date().toISOString()};
   }
+  if(Object.values(next).some(c=>c.qty!=null&&(!Number.isFinite(c.qty)||!Number.isFinite(c.waste)))){alert('ยอดรวมสูงเกินไปหรือหน่วยแปลงไม่ถูกต้อง กรุณาตรวจตัวเลข');return;}
+  const warnings=countAnomalyWarnings(branch,date,next,previous,orderedCountEntries());
+  if(warnings.length&&!confirm(`พบ ${warnings.length} รายการที่ควรตรวจซ้ำ · สาขา ${workflow.branches[branch]||branch} · ${date}\n\n${warnings.join('\n\n')}\n\nการรับสินค้า/การใช้งานจริงอาจทำให้ยอดเปลี่ยนได้ หากตรวจแล้วถูกต้อง กดตกลงเพื่อบันทึก หรือยกเลิกเพื่อแก้ไข`))return;
   workflow.counts[key]=next;
   try{await storeWorkflow();delete countDrafts[key];$w('countSaveStatus').textContent=`บันทึกแล้ว ${workflow.branches[branch]} · ${date} · ระบบแปลงหน่วยให้แล้ว`;$w('varianceBranchInput').value=branch;$w('varianceDailyInput').value=date;appState.varianceFilter.branch=branch;appState.varianceFilter.dailyDate=date;}
   catch(error){workflow.counts[key]=previous;storageError(error);}
 }
+

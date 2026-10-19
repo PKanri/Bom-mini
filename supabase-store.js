@@ -65,6 +65,7 @@ function cloudRender() {
   }
   $w('nav-tab-bom').hidden=false;
   $w('nav-tab-import').hidden=Boolean(branch);
+  $w('nav-tab-restore').hidden=bomCloud.member?.role!=='admin';
   if(branch)switchTab('tab-count');
   $w('cloudMigrate').hidden=bomCloud.member?.role!=='admin';
   $w('cloudActions').hidden=!bomCloud.member;
@@ -173,6 +174,7 @@ function cloudAuthView(unlocked) {
   $w('cloudAccount').title=$w('cloudAccount').textContent;
 }
 function cloudClearSession() {
+  if(typeof resetRestore==='function')resetRestore();
   try {sessionStorage.removeItem(cloudSessionKey);} catch { /* Storage may be disabled. */ }
   bomCloud.session=null;bomCloud.member=null;bomCloud.coverage=[];bomCloud.baseline=new Map();workflowReady=false;
   workflow={version:1,settings:{},branches:{},batches:{},counts:{}};

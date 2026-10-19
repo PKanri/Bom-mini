@@ -405,7 +405,7 @@ function buildReport(branch,start,end) {
       }
       // Central movement files cover all branches. No matching transaction for
       // this branch is zero movement, not an absent upload. Sales remain scoped.
-      if (!b || date<b.start || date>b.end || (type==='SALES' && !b.branches.includes(branch))) issues.add(`ขาดข้อมูล${labels[type]}ของสาขาในช่วงที่เลือก`);
+      if (!b || date<b.start || date>b.end || b.excludedDates?.includes(date) || (type==='SALES' && !b.branches.includes(branch))) issues.add(`ขาดข้อมูล${labels[type]}ของสาขาในช่วงที่เลือก`);
       else if (b.quantityField !== sourceQuantityField(type)) issues.add(`กรุณานำเข้า${labels[type]}ใหม่ โดยใช้คอลัมน์ ${sourceQuantityField(type)}`);
       else batches[type]=b;
     }
@@ -477,6 +477,12 @@ function stockDifference(r) {
   const qty=Math.abs(r.overuse)<0.000001?0:-r.overuse;
   return {qty,pct:r.bom>0?qty/r.bom*100:qty===0?0:null,label:qty<0?'ใช้เกินสูตร':qty>0?'ใช้น้อยกว่าสูตร':'ตรงตามสูตร',tone:qty<0?'short':qty>0?'surplus':'equal'};
 }
+function varianceBarHtml(d) {
+  if(d.pct==null)return '<span class="text-slate-400">—</span>';
+  const value=d.pct===0?0:-d.pct,width=Math.min(Math.abs(value),100)/2;
+  const label=(value>0?'+':'')+value.toLocaleString('th-TH',{minimumFractionDigits:2,maximumFractionDigits:2})+'%';
+  return `<div class="variance-bar" role="img" aria-label="${esc(d.label+' '+label)}" title="${esc(d.label+' '+label)}${Math.abs(value)>100?' · แถบเต็มที่ 100%':''}"><span class="variance-bar-fill ${value<0?'variance-bar-negative':'variance-bar-positive'}" style="left:${value<0?50-width:50}%;width:${width}%"></span><span class="variance-bar-axis"></span><span class="variance-bar-label">${label}</span></div>`;
+}
 function reportRowsHtml(rows,withDate) {
   const signed=(value,sign)=>value==null?'—':value===0?'0':sign+fmt(value);
   return rows.map(r=>{
@@ -492,8 +498,8 @@ function reportRowsHtml(rows,withDate) {
       <td class="p-3 text-right stock-theory">${fmt(r.theory)}</td>
       <td class="p-3 text-right stock-actual">${fmt(r.actual)}</td>
       <td class="p-3 text-right whitespace-nowrap stock-diff-${d.tone}">${d.qty==null?'—':(d.qty>0?'+':'')+fmt(d.qty)+' '+esc(r.unit)}</td>
-      <td class="p-3"><span class="stock-badge stock-badge-${d.tone}">${d.label}${pct?' ('+pct+')':''}</span>${!r.ready?'<div class="stock-issues">'+esc(r.issues.join(' / '))+'</div>':d.pct==null?'<div class="stock-issues">BOM เป็น 0 จึงคำนวณ % ไม่ได้</div>':''}</td></tr>`;
-  }).join('')||`<tr><td colspan="${withDate?11:10}" class="p-6">ยังไม่มีข้อมูลสำหรับรายงาน</td></tr>`;
+      <td class="p-3">${varianceBarHtml(d)}</td><td class="p-3"><span class="stock-badge stock-badge-${d.tone}">${d.label}${pct?' ('+pct+')':''}</span>${!r.ready?'<div class="stock-issues">'+esc(r.issues.join(' / '))+'</div>':d.pct==null?'<div class="stock-issues">BOM เป็น 0 จึงคำนวณ % ไม่ได้</div>':''}</td></tr>`;
+  }).join('')||`<tr><td colspan="${withDate?12:11}" class="p-6">ยังไม่มีข้อมูลสำหรับรายงาน</td></tr>`;
 }
 const originalSetVarianceViewType=setVarianceViewType;
 setVarianceViewType=function(type){originalSetVarianceViewType(type);renderVarianceDashboard();};
@@ -509,13 +515,13 @@ function exportVarianceReport() {
       'ยกมา (Opening)':r.opening??'','รับเข้า (+)':r.in,'จ่ายออก (−)':r.out===0?0:-r.out,'สูญเสีย (−)':r.waste===0?0:-r.waste,
       'ตัดตามสูตร (−)':r.bom===0?0:-r.bom,'สต็อกควรมี':r.theory??'','ยอดนับจริง':r.actual??'',
       'ผลต่าง (Qty)':d.qty??'','% ผลต่างเทียบ BOM':d.pct==null?'':d.pct/100,
-      'สถานะ':d.label+(pct?' ('+pct+')':''),'รายละเอียด':!r.ready?r.issues.join(' / '):d.pct==null?'BOM เป็น 0 จึงคำนวณ % ไม่ได้':''};
+      'สถานะ':d.label+(pct?' ('+pct+')':''),'% การใช้เกินสูตร (กราฟ)':d.pct==null?'':d.pct===0?0:-d.pct/100,'รายละเอียด':!r.ready?r.issues.join(' / '):d.pct==null?'BOM เป็น 0 จึงคำนวณ % ไม่ได้':''};
   });
   const sheet=XLSX.utils.json_to_sheet(rows),headers=Object.keys(rows[0]);
-  const numeric=['ยกมา (Opening)','รับเข้า (+)','จ่ายออก (−)','สูญเสีย (−)','ตัดตามสูตร (−)','สต็อกควรมี','ยอดนับจริง','ผลต่าง (Qty)','% ผลต่างเทียบ BOM'];
+  const numeric=['ยกมา (Opening)','รับเข้า (+)','จ่ายออก (−)','สูญเสีย (−)','ตัดตามสูตร (−)','สต็อกควรมี','ยอดนับจริง','ผลต่าง (Qty)','% ผลต่างเทียบ BOM','% การใช้เกินสูตร (กราฟ)'];
   for(let row=1;row<=rows.length;row++)for(const header of numeric){
     const cell=sheet[XLSX.utils.encode_cell({r:row,c:headers.indexOf(header)})];
-    if(cell?.t==='n')cell.z=header==='% ผลต่างเทียบ BOM'?'+0.0%;-0.0%;0.0%':header==='รับเข้า (+)'||header==='ผลต่าง (Qty)'?'+#,##0.###;-#,##0.###;0':'#,##0.###;-#,##0.###;0';
+    if(cell?.t==='n')cell.z=header.startsWith('% ')?'+0.0%;-0.0%;0.0%':header==='รับเข้า (+)'||header==='ผลต่าง (Qty)'?'+#,##0.###;-#,##0.###;0':'#,##0.###;-#,##0.###;0';
   }
   sheet['!cols']=headers.map(h=>({wch:h==='วัตถุดิบ'?42:h==='รายละเอียด'?65:h==='สถานะ'?30:19}));
   sheet['!autofilter']={ref:sheet['!ref']};
