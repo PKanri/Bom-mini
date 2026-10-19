@@ -15,6 +15,9 @@
     .stock-theory { background:#f4f7fb; font-weight:600; }
     .stock-actual { background:#ecfdf5; font-weight:700; }
     .stock-result-row:hover { background:#fafcff; }
+    #menuCardsContainer { max-height:min(712px,65vh); overflow-y:auto; overscroll-behavior-y:contain; scrollbar-gutter:stable; padding-right:4px; }
+    #menuCardsContainer > div { height:64px; box-sizing:border-box; padding:10px 12px; }
+    #menuCardsContainer > div > div:first-child > span { display:block; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
     .variance-bar { position:relative; width:220px; height:30px; background:#f8fafc; border-bottom:1px solid #e2e8f0; overflow:hidden; }
     .variance-bar-axis { position:absolute; left:50%; top:0; bottom:0; border-left:1px dotted #64748b; }
     .variance-bar-fill { position:absolute; top:4px; height:22px; box-sizing:border-box; }
@@ -145,10 +148,10 @@
       <!-- Recipe Selector & Cost Breakdown Card -->
       <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <!-- Left: Menu List -->
-        <div class="bg-[var(--card,#ffffff)] rounded-2xl border border-[var(--border,#e2e8f0)] p-4 shadow-xs space-y-3">
+        <div class="bg-[var(--card,#ffffff)] rounded-2xl border border-[var(--border,#e2e8f0)] p-4 shadow-xs space-y-3 self-start min-w-0">
           <div class="text-xs font-bold text-[var(--muted-foreground,#64748b)] uppercase tracking-wider">เลือกเมนูขาย (POS Menu)</div>
           <input id="menuSearch" oninput="renderBomModule()" placeholder="ค้นหารหัสหรือชื่อเมนู" class="w-full border rounded-lg p-2 text-xs">
-          <div id="menuCardsContainer" class="space-y-2">
+          <div id="menuCardsContainer" class="space-y-2" tabindex="0" role="region" aria-label="รายการเมนูขาย เลื่อนเพื่อดูเมนูเพิ่มเติม">
             <!-- Rendered by JS -->
           </div>
         </div>
@@ -912,11 +915,15 @@
     // 3. MODULE 1: BOM LOGIC & RENDERING
     function renderBomModule() {
       const container = document.getElementById('menuCardsContainer');
+      const query=document.getElementById('menuSearch')?.value||'';
+      const previousScroll=container.dataset.search===query?container.scrollTop:0;
+      container.dataset.search=query;
       container.innerHTML = '';
 
       appState.recipes.filter(recipe => (recipe.menuCode + ' ' + recipe.menuName).toLowerCase().includes((document.getElementById('menuSearch')?.value || '').toLowerCase())).forEach(recipe => {
         const isSelected = recipe.menuId === appState.selectedMenuId;
         const card = document.createElement('div');
+        card.title=recipe.menuName;
         card.className = `p-3.5 rounded-xl border cursor-pointer transition-all ${
           isSelected 
             ? 'bg-emerald-50/70 border-emerald-300 shadow-xs' 
@@ -939,6 +946,7 @@
         container.appendChild(card);
       });
 
+      container.scrollTop=previousScroll;
       // Render Selected Recipe Details
       const selected = appState.recipes.find(r => r.menuId === appState.selectedMenuId) || appState.recipes[0];
       document.getElementById('currentRecipeName').textContent = selected.menuName;
