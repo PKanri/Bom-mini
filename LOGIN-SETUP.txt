@@ -22,10 +22,11 @@ on conflict(user_id) do update set role=excluded.role,branch=excluded.branch;
 select m.*,u.email from public.bom_members m join auth.users u on u.id=m.user_id;
 
 4. รีเฟรชหน้าเว็บ แล้วเข้าสู่ระบบด้วยบัญชีที่สร้าง
-   โทเคนเก็บในหน่วยความจำเท่านั้น รีเฟรชหน้าต้องเข้าสู่ระบบใหม่
+   จำการเข้าสู่ระบบในแท็บเดิม รีเฟรชหน้าได้โดยไม่ต้องกรอกรหัสผ่านใหม่
    หากลืมรหัสผ่าน ให้ผู้ดูแลจัดการบัญชีผ่าน Supabase Authentication
 
 สำคัญ: เปลี่ยนหน้าเว็บอย่างเดียวไม่ปิด API เก่า ต้องรัน SQL ข้อ 1 ด้วย
 ไม่มี Secret Key หรือ Service Role Key ในหน้าเว็บ
 บัญชีที่ไม่มีแถวใน bom_members จะเข้าใช้งานไม่ได้
 คู่มือ Supabase: https://supabase.com/docs/guides/auth/passwords
+

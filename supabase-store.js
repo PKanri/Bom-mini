@@ -55,6 +55,13 @@ function cloudRestore(docs) {
   }
   appState.selectedMenuId=appState.recipes[0]?.menuId;
 }
+function cloudArrangeNavigation(isBranch) {
+  const order=isBranch?['bom','branch-check','count','variance','import','stock-overview']:['bom','import','count','variance','branch-check','stock-overview'];
+  const check=$w('nav-tab-branch-check');
+  check.textContent=(isBranch?'2':'5')+'. ตรวจสต็อกก่อนปิดวัน';
+  const container=check.parentElement;
+  if(container)for(const tab of order)container.appendChild($w('nav-tab-'+tab));
+}
 function cloudRender() {
   for(const key of Object.keys(countDrafts))delete countDrafts[key];
   activeCountScope=null;activeCountCodes=[];
@@ -65,7 +72,10 @@ function cloudRender() {
   }
   $w('nav-tab-bom').hidden=false;
   $w('nav-tab-import').hidden=Boolean(branch);
-  $w('nav-tab-restore').hidden=bomCloud.member?.role!=='admin';
+  $w('cloudRestoreMenu').hidden=bomCloud.member?.role!=='admin';
+  $w('nav-tab-stock-overview').hidden=bomCloud.member?.role!=='admin';
+  cloudArrangeNavigation(Boolean(branch));
+  if(typeof resetStockOverview==='function')resetStockOverview();
   if(branch)switchTab('tab-count');
   $w('cloudMigrate').hidden=bomCloud.member?.role!=='admin';
   $w('cloudActions').hidden=!bomCloud.member;
@@ -174,6 +184,11 @@ function cloudAuthView(unlocked) {
   $w('cloudAccount').title=$w('cloudAccount').textContent;
 }
 function cloudClearSession() {
+  cloudArrangeNavigation(false);
+  $w('nav-tab-stock-overview').hidden=true;
+  $w('cloudRestoreMenu').hidden=true;
+  if(typeof resetStockOverview==='function')resetStockOverview();
+  if(typeof resetBranchCheck==='function')resetBranchCheck();
   if(typeof resetRestore==='function')resetRestore();
   try {sessionStorage.removeItem(cloudSessionKey);} catch { /* Storage may be disabled. */ }
   bomCloud.session=null;bomCloud.member=null;bomCloud.coverage=[];bomCloud.baseline=new Map();workflowReady=false;

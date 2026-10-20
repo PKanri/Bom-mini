@@ -1,0 +1,2152 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ระบบจัดการสูตรอาหาร BOM & สต็อกวัตถุดิบ (Restaurant BOM & Inventory App)</title>
+  <script src="https://www.gstatic.com/antigravity/web/dev/tailwindcss.min.js"></script>
+  <style>
+    [hidden] { display: none !important; }
+    body:not(.auth-locked) #cloudLoginPanel { display: none; }
+    body.auth-locked section.tab-content { display: none !important; }
+    .stock-in { color:#059669; }
+    .stock-out { color:#e11d48; }
+    .stock-bom { color:#4f46e5; font-weight:600; }
+    .stock-theory { background:#f4f7fb; font-weight:600; }
+    .stock-actual { background:#ecfdf5; font-weight:700; }
+    .stock-result-row:hover { background:#fafcff; }
+    #menuCardsContainer { max-height:min(712px,65vh); overflow-y:auto; overscroll-behavior-y:contain; scrollbar-gutter:stable; padding-right:4px; }
+    #menuCardsContainer > div { height:64px; box-sizing:border-box; padding:10px 12px; }
+    #menuCardsContainer > div > div:first-child > span { display:block; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+    .variance-bar { position:relative; width:220px; height:30px; background:#f8fafc; border-bottom:1px solid #e2e8f0; overflow:hidden; }
+    .variance-bar-axis { position:absolute; left:50%; top:0; bottom:0; border-left:1px dotted #64748b; }
+    .variance-bar-fill { position:absolute; top:4px; height:22px; box-sizing:border-box; }
+    .variance-bar-negative { background:linear-gradient(to right,#dbeafe,#3b82f6); border:1px solid #3b82f6; }
+    .variance-bar-positive { background:linear-gradient(to right,#ef4444,#fecaca); border:1px solid #ef4444; }
+    .variance-bar-label { position:relative; z-index:1; display:block; text-align:center; line-height:30px; color:#0f172a; font-variant-numeric:tabular-nums; font-weight:600; text-shadow:0 0 3px white,0 0 3px white; }
+    .stock-diff-short { color:#e11d48; font-weight:700; }
+    .stock-diff-surplus { color:#1d4ed8; font-weight:700; }
+    .stock-diff-equal { color:#047857; font-weight:700; }
+    .stock-badge { display:inline-block; border-radius:999px; padding:5px 10px; font-weight:600; white-space:nowrap; }
+    .stock-badge-short { background:#ffe4e6; color:#be123c; }
+    .stock-badge-surplus { background:#dbeafe; color:#1d4ed8; }
+    .stock-badge-equal { background:#d1fae5; color:#047857; }
+    .stock-badge-pending { background:#fef3c7; color:#92400e; }
+    .stock-issues { margin-top:8px; max-width:270px; font-size:11px; color:#64748b; }
+    /* Custom scrollbars and transitions */
+    ::-webkit-scrollbar { width: 6px; height: 6px; }
+    ::-webkit-scrollbar-track { background: rgba(0, 0, 0, 0.03); }
+    ::-webkit-scrollbar-thumb { background: rgba(0, 0, 0, 0.15); border-radius: 9999px; }
+    input[type=number]::-webkit-inner-spin-button, 
+    input[type=number]::-webkit-outer-spin-button { 
+      opacity: 1;
+    }
+  </style>
+</head>
+<body class="auth-locked bg-[var(--background,#f8fafc)] text-[var(--foreground,#0f172a)] antialiased font-sans min-h-screen">
+
+  <!-- TOP NAVIGATION HEADER -->
+  <header class="bg-[var(--card,#ffffff)] border-b border-[var(--border,#e2e8f0)] sticky top-0 z-30 shadow-xs">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div class="flex flex-wrap items-center justify-between gap-3 py-3">
+        <!-- Logo & Title -->
+        <div class="flex items-center gap-3">
+          <div class="w-10 h-10 rounded-xl bg-emerald-600 flex items-center justify-center text-white shadow-sm font-bold text-lg">
+            🍽️
+          </div>
+          <div>
+            <div class="font-bold text-base sm:text-lg text-[var(--foreground,#0f172a)] flex items-center gap-2">
+              Ponn Bom &amp; Inventory Suite
+              <span class="text-xs bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded-full font-medium">BOM & Branch Inventory</span>
+            </div>
+            <p class="text-xs text-[var(--muted-foreground,#64748b)]">ระบบบริหารจัดการสูตรอาหาร, นำเข้าข้อมูล และวิเคราะห์ผลต่างสต็อก</p>
+          </div>
+        </div>
+
+        <details id="cloudActions" hidden class="relative ml-auto text-xs text-slate-600">
+          <summary class="cursor-pointer rounded-lg px-3 py-2 hover:bg-slate-50 flex items-center gap-2" aria-label="เมนูบัญชีผู้ใช้">
+            <span class="h-2 w-2 rounded-full bg-emerald-500" aria-hidden="true"></span>
+            <span id="cloudAccount" class="max-w-[220px] truncate"></span><span aria-hidden="true">▾</span>
+          </summary>
+          <div class="absolute right-0 top-full mt-2 w-64 max-w-[85vw] rounded-xl border border-slate-200 bg-white shadow-lg p-2 z-50">
+            <button onclick="cloudReload()" class="block w-full text-left rounded-lg px-3 py-2 hover:bg-slate-50">โหลดข้อมูลล่าสุด</button>
+            <button id="cloudRestoreMenu" onclick="switchTab('tab-restore');document.getElementById('cloudActions').open=false" hidden class="block w-full text-left rounded-lg px-3 py-2 hover:bg-slate-50">กู้คืน JSON / รายงานย้อนหลัง</button>
+            <button id="cloudMigrate" onclick="cloudMigrateLocal()" class="block w-full text-left rounded-lg px-3 py-2 hover:bg-slate-50" hidden>ย้ายข้อมูลเดิมจากเครื่องนี้</button>
+            <button onclick="cloudSignOut()" class="block w-full text-left rounded-lg px-3 py-2 text-rose-600 hover:bg-rose-50">ออกจากระบบ</button>
+          </div>
+        </details>
+      </div>
+
+      <!-- MAIN MODULE TABS -->
+      <div class="flex space-x-1 sm:space-x-4 border-t border-[var(--border,#f1f5f9)] overflow-x-auto py-2">
+        <button onclick="switchTab('tab-bom')" id="nav-tab-bom" class="tab-btn active flex items-center gap-2 px-3 py-2 text-xs sm:text-sm font-semibold rounded-lg transition-all text-emerald-700 bg-emerald-50 border border-emerald-200">
+          <span>📋</span> 1. สูตร BOM & Master Data
+        </button>
+        <button onclick="switchTab('tab-import')" id="nav-tab-import" class="tab-btn flex items-center gap-2 px-3 py-2 text-xs sm:text-sm font-semibold rounded-lg transition-all text-[var(--muted-foreground,#64748b)] hover:bg-[var(--card,#f8fafc)]">
+          <span>📥</span> 2. ส่วนกลางนำเข้าข้อมูลทุกสาขา
+        </button>
+        <button onclick="switchTab('tab-count')" id="nav-tab-count" class="tab-btn flex items-center gap-2 px-3 py-2 text-xs sm:text-sm font-semibold rounded-lg transition-all text-[var(--muted-foreground,#64748b)] hover:bg-[var(--card,#f8fafc)]">
+          <span>📝</span> 3. สาขาคีย์ยอดคงเหลือรายวัน
+        </button>
+        <button onclick="switchTab('tab-variance')" id="nav-tab-variance" class="tab-btn flex items-center gap-2 px-3 py-2 text-xs sm:text-sm font-semibold rounded-lg transition-all text-[var(--muted-foreground,#64748b)] hover:bg-[var(--card,#f8fafc)]">
+          <span>📊</span> 4. ผลต่างวัตถุดิบสำคัญรายสาขา
+        </button>
+        <button onclick="switchTab('tab-branch-check')" id="nav-tab-branch-check" class="tab-btn flex items-center gap-2 px-3 py-2 text-xs sm:text-sm font-semibold rounded-lg text-slate-600 whitespace-nowrap">5. ตรวจสต็อกก่อนปิดวัน</button>
+        <button onclick="switchTab('tab-stock-overview')" id="nav-tab-stock-overview" hidden class="tab-btn flex items-center gap-2 px-3 py-2 text-xs sm:text-sm font-semibold rounded-lg text-slate-600 whitespace-nowrap">6. สต็อกคงเหลือแต่ละสาขา</button>
+      </div>
+    </div>
+  </header>
+
+  <!-- MAIN APP CONTAINER -->
+  <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
+    <p id="workflowStorage" class="text-xs text-slate-600 mb-4">กำลังเปิดข้อมูลที่บันทึกไว้…</p>
+    <div id="cloudLoginPanel" class="bg-white border border-emerald-200 rounded-xl p-4 mb-5 space-y-3">
+      <strong>เข้าสู่ระบบ</strong>
+      <p id="cloudMessage" class="text-sm" role="status" aria-live="polite">กำลังเชื่อมต่อฐานข้อมูล…</p>
+      <p id="cloudGate" class="text-sm">เข้าสู่ระบบด้วยบัญชีที่ส่วนกลางจัดให้ หากยังไม่มีบัญชีหรือลืมรหัสผ่าน กรุณาติดต่อผู้ดูแลระบบ</p>
+      <form id="cloudLogin" onsubmit="event.preventDefault();cloudSignIn()" class="max-w-sm space-y-3">
+        <label class="block">อีเมล<input id="cloudEmail" type="email" autocomplete="username" required class="block border rounded px-3 py-2 w-full"></label>
+        <label class="block">รหัสผ่าน<input id="cloudPassword" type="password" autocomplete="current-password" required class="block border rounded px-3 py-2 w-full"></label>
+        <button id="cloudSignInButton" type="submit" class="bg-emerald-600 text-white rounded px-4 py-2">เข้าสู่ระบบ</button>
+      </form>
+    </div>
+
+    <!-- ==================================================================== -->
+    <!-- MODULE 1: BOM & MASTER DATA -->
+    <!-- ==================================================================== -->
+    <section id="tab-bom" class="tab-content space-y-6">
+      <p class="rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm">สูตร BOM และวัตถุดิบหน้านี้ใช้ร่วมกันทุกสาขา การแก้ไขและบันทึกจะมีผลกับทุกสาขาที่ใช้สูตรนี้</p>
+      <div class="bg-white p-5 rounded-2xl border border-slate-200 space-y-3">
+        <h2 class="font-bold">วัตถุดิบสำคัญที่ต้องตรวจนับและติดตามผลต่าง</h2>
+        <p class="text-sm text-slate-600">ใช้งานประจำวัน: อัปโหลดไฟล์ในหน้า 2 แล้วกรอกยอดตรวจนับในหน้า 3 ระบบคำนวณยอดรับเข้าและจ่ายออกจากไฟล์ให้เอง</p>
+        <details class="border rounded-xl p-3">
+        <summary class="cursor-pointer text-sm font-semibold text-slate-600">ตั้งค่าวัตถุดิบที่ติดตาม / หน่วยในไฟล์</summary>
+        <p class="text-xs text-slate-600 my-3">ตั้งครั้งแรก หรือเมื่อหน่วยในไฟล์เปลี่ยนเท่านั้น ไม่ต้องกรอกยอดรับเข้า–จ่ายออกที่นี่ รายการเดิมใช้การตั้งค่าที่บันทึกไว้ได้เลย</p>
+        <select id="criticalProduct" onchange="selectCriticalProduct()" class="border rounded-lg p-2 w-full"></select>
+        <p class="text-xs text-slate-600 mt-3">กรอกเฉพาะฝั่งซ้าย: เช่น 35 ไม้ = 1 แพ็ค ให้กรอก 35 ไม่ใช่ยอดรับเข้า–จ่ายออกทั้งหมด</p>
+        <fieldset id="criticalSettingsFields" disabled class="mt-3 space-y-3" oninput="updateCriticalExample()">
+        <div class="flex flex-wrap gap-3 items-end text-xs">
+          <label>หน่วยที่ใช้ในสูตรและรายงาน<select id="criticalUnit" class="block border rounded p-2 disabled:bg-slate-100"><option value="">เลือกวัตถุดิบก่อน</option></select><span id="criticalUnitHint" class="block mt-1 text-slate-500">ระบบใช้หน่วยเดียวกับวัตถุดิบในสูตร BOM</span></label>
+          <fieldset class="border rounded-lg p-3"><legend>หน่วยในไฟล์รับเข้า</legend><button type="button" onclick="setCriticalSameUnit('In')" class="text-emerald-700 underline mb-2">ใช้หน่วยเดียวกับรายงาน (1 = 1)</button><div class="flex gap-2 items-end">
+            <label>กี่หน่วยในไฟล์<input id="criticalInSourceQty" type="number" min="0" step="any" class="block border rounded p-2 w-24"></label><span class="pb-2">=</span>
+            <label>ต่อ 1 หน่วยรายงาน<input id="criticalInFactor" type="number" value="1" readonly tabindex="-1" class="block border rounded p-2 w-24 bg-slate-100"></label>
+          </div></fieldset>
+          <fieldset class="border rounded-lg p-3"><legend>หน่วยในไฟล์จ่ายออก</legend><button type="button" onclick="setCriticalSameUnit('Out')" class="text-emerald-700 underline mb-2">ใช้หน่วยเดียวกับรายงาน (1 = 1)</button><div class="flex gap-2 items-end">
+            <label>กี่หน่วยในไฟล์<input id="criticalOutSourceQty" type="number" min="0" step="any" class="block border rounded p-2 w-24"></label><span class="pb-2">=</span>
+            <label>ต่อ 1 หน่วยรายงาน<input id="criticalOutFactor" type="number" value="1" readonly tabindex="-1" class="block border rounded p-2 w-24 bg-slate-100"></label>
+          </div></fieldset>
+          <label><input id="criticalEnabled" type="checkbox" checked> ติดตามเป็นวัตถุดิบสำคัญ</label>
+          <button onclick="saveCriticalProduct()" class="bg-emerald-600 text-white rounded-lg p-2">บันทึกการตั้งค่า</button>
+        </div>
+        <p id="criticalExample" role="status" class="rounded-lg bg-slate-50 p-3 text-sm text-slate-600">เลือกวัตถุดิบเพื่อดูการตั้งค่าที่ใช้อยู่</p>
+        </fieldset>
+        </details>
+        <details class="text-sm">
+        <summary id="criticalListSummary" class="cursor-pointer text-slate-600">ดูรายการที่ติดตาม</summary>
+        <ul id="criticalList" class="text-xs text-slate-600 space-y-1"></ul>
+        </details>
+        <p class="text-xs text-slate-600">ใช้รหัสเมนูให้ตรงกับ Product (Code) ในไฟล์ยอดขาย ระบบคำนวณเฉพาะรหัสขายที่มีวัตถุดิบในสูตร BOM และข้ามรหัสที่ยังไม่มีสูตร</p>
+      </div>
+      <!-- Section Header -->
+      <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-[var(--card,#ffffff)] p-5 rounded-2xl border border-[var(--border,#e2e8f0)] shadow-xs">
+        <div>
+          <h2 class="text-lg font-bold text-[var(--foreground,#0f172a)] flex items-center gap-2">
+            📋 จัดการสูตรอาหาร (BOM) และวัตถุดิบหลัก (Master Data)
+          </h2>
+          <p class="text-xs text-[var(--muted-foreground,#64748b)] mt-1">
+            กำหนดปริมาณวัตถุดิบต่อจาน หน่วยฐาน และ Yield เพื่อคำนวณยอดใช้ตามสูตรและหาผลต่างการใช้ของแต่ละสาขา
+          </p>
+        </div>
+        <div class="flex items-center gap-2">
+          <button onclick="showAddRecipeModal()" class="bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-xl text-xs font-semibold shadow-xs flex items-center gap-1.5 transition-colors">
+            ➕ เพิ่มเมนู/สูตรใหม่
+          </button>
+        </div>
+      </div>
+
+      <!-- Recipe Selector & Cost Breakdown Card -->
+      <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <!-- Left: Menu List -->
+        <div class="bg-[var(--card,#ffffff)] rounded-2xl border border-[var(--border,#e2e8f0)] p-4 shadow-xs space-y-3 self-start min-w-0">
+          <div class="text-xs font-bold text-[var(--muted-foreground,#64748b)] uppercase tracking-wider">เลือกเมนูขาย (POS Menu)</div>
+          <input id="menuSearch" oninput="renderBomModule()" placeholder="ค้นหารหัสหรือชื่อเมนู" class="w-full border rounded-lg p-2 text-xs">
+          <div id="menuCardsContainer" class="space-y-2" tabindex="0" role="region" aria-label="รายการเมนูขาย เลื่อนเพื่อดูเมนูเพิ่มเติม">
+            <!-- Rendered by JS -->
+          </div>
+        </div>
+
+        <!-- Right: Recipe Details & Ingredients (2 Cols) -->
+        <div class="lg:col-span-2 bg-[var(--card,#ffffff)] rounded-2xl border border-[var(--border,#e2e8f0)] p-5 shadow-xs space-y-5">
+          <div class="flex flex-col sm:flex-row sm:items-center justify-between border-b border-[var(--border,#f1f5f9)] pb-4 gap-2">
+            <div>
+              <div class="flex items-center gap-2">
+                <h3 id="currentRecipeName" class="text-base font-bold text-[var(--foreground,#0f172a)]">ชื่อเมนู</h3>
+                <span id="currentRecipeCode" class="text-xs bg-slate-100 text-slate-700 font-mono px-2 py-0.5 rounded">CODE</span>
+              </div>
+              <p class="text-xs text-[var(--muted-foreground,#64748b)] mt-0.5">สูตรอาหารมาตรฐาน Version 1.0 (สูตรที่เปิดใช้งาน)</p>
+            </div>
+          </div>
+
+          <!-- Recipe Items Table -->
+          <div>
+            <div class="flex items-center justify-between mb-2">
+              <span class="text-xs font-bold text-[var(--muted-foreground,#64748b)] uppercase tracking-wider">รายการวัตถุดิบในสูตร (Bill of Materials)</span>
+              <span class="text-xs text-slate-500">Gross Qty = Net Qty ÷ (Yield % ÷ 100)</span>
+            </div>
+            <div class="overflow-x-auto">
+              <table class="w-full text-left text-xs border border-[var(--border,#f1f5f9)] rounded-xl overflow-hidden">
+                <thead class="bg-[var(--background,#f8fafc)] text-[var(--foreground,#475569)] font-semibold border-b border-[var(--border,#e2e8f0)]">
+                  <tr>
+                    <th class="p-3">วัตถุดิบ (Raw Material)</th>
+                    <th class="p-3 text-right">ปริมาณสุทธิต่อจาน</th>
+                    <th class="p-3 text-center">Yield %</th>
+                    <th class="p-3 text-right">ปริมาณเบิกจริงต่อจาน</th>
+                    <th class="p-3 text-center w-20">จัดการ</th>
+                  </tr>
+                </thead>
+                <tbody id="recipeItemsTableBody" class="divide-y divide-[var(--border,#f1f5f9)]">
+                  <!-- Rendered by JS -->
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <!-- NEW INLINE FORM: เพิ่มวัตถุดิบเข้าสูตรนี้ (เมนูนี้ ใช้วัตถุดิบสำคัญ... ใช้จำนวนเท่าไหร่... หน่วยเป็น...) -->
+          <div class="bg-slate-50/90 border border-slate-200 rounded-2xl p-4.5 space-y-3.5 shadow-2xs">
+            <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+              <div class="text-xs font-bold text-slate-800 flex items-center gap-1.5">
+                <span class="text-emerald-600 font-extrabold text-sm">➕</span>
+                เพิ่มวัตถุดิบลงในสูตรนี้: 
+                <span id="addFormMenuNameDisplay" class="text-emerald-700 bg-emerald-100/70 px-2.5 py-0.5 rounded-lg font-bold">ชื่อเมนู</span>
+              </div>
+              <button type="button" onclick="openCreateMaterialModal()" class="text-xs text-indigo-600 hover:text-indigo-800 font-bold underline flex items-center gap-1 cursor-pointer">
+                ✨ + เพิ่มวัตถุดิบชนิดใหม่เข้า Master Data
+              </button>
+            </div>
+
+            <!-- Inputs matching user request -->
+            <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-12 gap-3 items-end">
+              <!-- Field 1: เมนูนี้ ใช้วัตถุดิบสำคัญ -->
+              <div class="lg:col-span-5 space-y-1">
+                <label class="block text-xs font-bold text-slate-700">
+                  1. เมนูนี้ ใช้วัตถุดิบสำคัญ: <span class="text-rose-500">*</span>
+                </label>
+                <select id="ingredientSelectInput" onchange="handleIngredientSelectChange(this.value)" class="w-full bg-white border border-slate-300 rounded-xl p-2.5 text-xs font-semibold text-slate-800 outline-none focus:ring-2 focus:ring-emerald-500 shadow-2xs">
+                  <!-- Populated dynamically by JS -->
+                </select>
+                <button type="button" onclick="openSelectedMaterialEditor()" class="text-xs font-semibold text-indigo-700 hover:underline py-1">✏️ แก้ไขวัตถุดิบที่เลือก</button>
+              </div>
+
+              <!-- Field 2: และใช้จำนวนเท่าไหร่ -->
+              <div class="lg:col-span-3 space-y-1">
+                <label class="block text-xs font-bold text-slate-700">
+                  2. ปริมาณสุทธิที่ใช้ต่อจาน: <span class="text-rose-500">*</span>
+                </label>
+                <input type="number" id="ingredientQtyInput" placeholder="เช่น 200" min="0.01" step="any" oninput="updateAddEstimate()" class="w-full bg-white border border-slate-300 rounded-xl p-2.5 text-xs font-bold text-slate-900 text-right outline-none focus:ring-2 focus:ring-emerald-500 shadow-2xs">
+              </div>
+
+              <!-- Field 3: หน่วยเป็น... -->
+              <div class="lg:col-span-2 space-y-1">
+                <label class="block text-xs font-bold text-slate-700">3. หน่วยเป็น:</label>
+                <div id="ingredientUnitBadge" class="w-full bg-slate-200/80 border border-slate-300 rounded-xl p-2.5 text-xs font-bold text-slate-800 text-center">
+                  กรัม (g)
+                </div>
+              </div>
+
+              <!-- Field 4: Yield % -->
+              <div class="lg:col-span-2 space-y-1">
+                <label class="block text-xs font-bold text-slate-700">
+                  Yield % (ตัดแต่ง):
+                </label>
+                <input type="number" id="ingredientYieldInput" value="100" min="1" max="100" step="1" oninput="updateAddEstimate()" class="w-full bg-white border border-slate-300 rounded-xl p-2.5 text-xs font-bold text-slate-900 text-right outline-none focus:ring-2 focus:ring-emerald-500 shadow-2xs">
+              </div>
+            </div>
+
+            <!-- Preview calculation & Add button -->
+            <div class="flex flex-col sm:flex-row sm:items-center justify-between pt-2 border-t border-slate-200/60 gap-3">
+              <div class="text-xs text-slate-500 flex flex-wrap items-center gap-2">
+                <span>⚡ ตัดเบิกจริง (Gross): <strong id="addEstimateGross" class="text-slate-800">0.0</strong></span>
+              </div>
+              <button type="button" onclick="addIngredientToCurrentRecipe()" class="bg-emerald-600 hover:bg-emerald-700 text-white px-5 py-2.5 rounded-xl text-xs font-bold shadow-xs transition-colors flex items-center justify-center gap-1.5 cursor-pointer">
+                <span>➕</span> เพิ่มวัตถุดิบเข้าสูตรทันที
+              </button>
+            </div>
+          </div>
+
+          <!-- Master Data Unit Conversion Note -->
+          <div class="bg-amber-50 border border-amber-200 rounded-xl p-3.5 text-xs text-amber-900 flex items-start gap-2.5">
+            <span class="text-base">💡</span>
+            <div>
+              <span class="font-bold">ปริมาณต่อจานและ Yield:</span>
+              หากวัตถุดิบมีการสูญเสียจากการแล่หรือตัดแต่ง เช่น เนื้อปลาสดที่มี Yield 80% การใส่ชิ้นปลาเสิร์ฟ 200g จะต้องคำนวณเบิกเนื้อปลาดิบจริง 250g ($200 \div 0.8$) ใช้ปริมาณเบิกจริงต่อจานคูณจำนวนจานที่ขาย เพื่อเทียบกับปริมาณใช้จริงของสาขา
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ==================================================================== -->
+    <!-- MODULE 2: EXCEL DATA IMPORT (ADMIN) -->
+    <!-- ==================================================================== -->
+    <section id="tab-import" class="tab-content hidden space-y-6">
+      <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-[var(--card,#ffffff)] p-5 rounded-2xl border border-[var(--border,#e2e8f0)] shadow-xs">
+        <div>
+          <h2 class="text-lg font-bold text-[var(--foreground,#0f172a)] flex items-center gap-2">
+            📥 ส่วนกลางอัปโหลดข้อมูลรวมทุกสาขา
+          </h2>
+          <p class="text-xs text-[var(--muted-foreground,#64748b)] mt-1">
+            อัปโหลดไฟล์รับเข้า จ่ายออก และยอดขายของแต่ละเดือน ระบบแยกตามรหัสสาขาและวันที่ในไฟล์ โดยไม่ต้องเลือกสาขา หากอัปโหลดประเภทเดิมในเดือนเดิมจะให้แทนที่ทั้งชุด
+          </p>
+        </div>
+
+      </div>
+
+      <!-- Import Type Selector & Upload Box -->
+      <details class="bg-white border border-rose-200 rounded-2xl p-5 space-y-3">
+        <summary class="font-bold text-rose-700 cursor-pointer">จัดการข้อมูลย้อนหลัง — ลบตามเดือน / ปี / ช่วงวันที่</summary>
+        <p class="text-sm text-slate-600">ลบข้อมูลยอดขาย รับเข้า จ่ายออก เครื่องดื่ม และยอดนับของทุกสาขา โดยคงสูตร BOM ไว้ โหมดเดือน/ปีเก็บยอดนับวันสุดท้ายเป็นยอดยกมา ส่วนโหมดช่วงวันที่ลบทุกวันที่เลือก รวมวันสิ้นสุด และคงข้อมูลนอกช่วง</p>
+        <div class="flex flex-wrap gap-3 items-center">
+          <label>รูปแบบ <select id="cleanupMode" onchange="resetCleanupPreview()" class="border rounded-lg p-2"><option value="period">เดือน / ปี (เก็บยอดนับวันสุดท้าย)</option><option value="range">ช่วงวันที่ (ลบทุกวันในช่วง)</option></select></label>
+          <label id="cleanupStartField" hidden>ตั้งแต่วันที่ <input id="cleanupStart" type="date" disabled onchange="resetCleanupPreview()" class="border rounded-lg p-2"></label>
+          <label id="cleanupEndField" hidden>ถึงวันที่ <input id="cleanupEnd" type="date" disabled onchange="resetCleanupPreview()" class="border rounded-lg p-2"></label>
+          <label id="cleanupPeriodField">เดือนหรือปี (ค.ศ.) <select id="cleanupPeriod" onchange="resetCleanupPreview()" class="border rounded-lg p-2"><option value="">รอโหลดข้อมูล</option></select></label>
+          <button onclick="prepareCleanup()" class="border rounded-lg px-3 py-2">ตรวจข้อมูลก่อนลบ</button>
+        </div>
+        <div id="cleanupPreview" class="text-sm bg-slate-50 p-3 rounded-lg" role="status" aria-live="polite">เลือกช่วง แล้วกดตรวจข้อมูลก่อนลบ</div>
+        <button id="cleanupBackup" onclick="downloadCleanupBackup()" disabled class="border rounded-lg px-3 py-2 disabled:opacity-40">1. ดาวน์โหลดสำรอง JSON</button>
+        <p class="text-xs text-slate-500">ไฟล์สำรองเก็บข้อมูลแถวที่จะลบและยอดยกมาที่คงไว้ สำหรับกู้คืนโดยผู้ดูแล ควรเก็บไฟล์นี้ให้ปลอดภัย</p>
+        <label class="block text-sm"><input id="cleanupBackupConfirmed" type="checkbox" disabled onchange="updateCleanupConfirmation()"> ดาวน์โหลดและเก็บไฟล์สำรองเรียบร้อยแล้ว</label>
+        <label class="block text-sm"><span id="cleanupConfirmHint">2. พิมพ์ช่วงที่เลือกเพื่อยืนยัน เช่น 2026-09 หรือ 2025</span> <input id="cleanupConfirmText" type="text" autocomplete="off" oninput="updateCleanupConfirmation()" class="border rounded-lg p-2 w-full sm:w-80"></label>
+        <button id="cleanupDelete" onclick="deleteCleanupPeriod()" disabled class="bg-rose-600 text-white rounded-lg px-4 py-2 disabled:opacity-40">3. ยืนยันลบจาก Supabase</button>
+      </details>
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+        <!-- Controls Column -->
+        <div class="bg-[var(--card,#ffffff)] p-5 rounded-2xl border border-[var(--border,#e2e8f0)] shadow-xs space-y-4">
+          <div>
+            <label class="block text-xs font-bold text-[var(--muted-foreground,#64748b)] mb-1">เลือกประเภทข้อมูลที่ต้องการนำเข้า</label>
+            <select id="importTypeSelect" onchange="handleImportTypeChange(this.value)" class="w-full bg-[var(--background,#f8fafc)] border border-[var(--border,#cbd5e1)] rounded-xl p-2.5 text-xs font-semibold text-[var(--foreground,#0f172a)] outline-none">
+              <option value="SALES">1. ข้อมูลยอดขายจากระบบ POS (Sales Data)</option>
+              <option value="STOCK_IN">2. ข้อมูลรับเข้าสต็อกสินค้า (Stock In)</option>
+              <option value="STOCK_OUT">3. ข้อมูลตัดจ่าย / โอนออก (Stock Out / Transfer)</option>
+              <option value="EXTRA_IN">4. ข้อมูลรับเข้าเพิ่มเติม / เครื่องดื่ม (แยกไฟล์)</option>
+            </select>
+          </div>
+
+          <!-- Drag and Drop Box -->
+          <div class="border-2 border-dashed border-slate-300 rounded-2xl p-6 text-center hover:border-emerald-500 transition-colors bg-slate-50/50">
+            <div class="text-3xl mb-2">📊</div>
+            <div class="text-xs font-bold text-slate-700">เลือกไฟล์ Excel (.xlsx, .xls) หรือ CSV</div>
+            <div class="text-xs text-slate-400 mt-1">หรือคลิกเพื่อเลือกไฟล์</div>
+            <input type="file" id="excelFileInput" accept=".xlsx,.xls,.csv" class="hidden" onchange="handleFileSelected(event)">
+            <button onclick="document.getElementById('excelFileInput').click()" class="mt-3 bg-white border border-slate-300 hover:bg-slate-50 text-slate-700 px-3 py-1.5 rounded-lg text-xs font-semibold shadow-xs">
+              เลือกไฟล์จากคอมพิวเตอร์
+            </button>
+          </div>
+
+          <div id="stockOutMapping" class="hidden space-y-2 text-xs border-t pt-3">
+            <p>จ่ายออกใช้คอลัมน์ <strong>Sum Number</strong> อัตโนมัติ ตามชีตสรุป In-Out</p>
+            <p>รวมตามรหัสสินค้า สาขา และวันที่ แล้วหารด้วยตัวคูณหน่วยของวัตถุดิบในต้นแบบ</p>
+          </div>
+          <div id="extraInHelp" class="hidden space-y-2 text-xs border-t pt-3">
+            <p>อัปโหลดข้อมูลรับเข้าอีกชุด ใช้ Number และบันทึกแยกจาก Stock In เดิม รวมยอดเฉพาะตอนคำนวณ: รับเข้า + รับเข้าเพิ่มเติม − จ่ายออก</p>
+            <p>รองรับรูปแบบ Stock In (วันที่ DocDate) และรูปแบบเครื่องดื่ม In ในต้นแบบ (วันที่ Create Time ตามสูตร Excel) ใช้รายการที่ไม่ซ้ำกับไฟล์รับเข้าชุดที่ 2</p>
+          </div>
+          <div class="text-xs text-slate-600 border-t pt-3">ไฟล์ที่บันทึกแล้ว<ul id="importHistory" class="mt-2 space-y-2"></ul></div>
+        </div>
+
+        <!-- Preview & Validation Results (2 Cols) -->
+        <div class="md:col-span-2 bg-[var(--card,#ffffff)] p-5 rounded-2xl border border-[var(--border,#e2e8f0)] shadow-xs space-y-4">
+          <div class="flex items-center justify-between border-b border-slate-100 pb-3">
+            <div>
+              <h3 class="text-sm font-bold text-[var(--foreground,#0f172a)] flex items-center gap-2">
+                <span>ตารางพรีวิวและตรวจสอบความถูกต้อง (Data Validation)</span>
+                <span id="importStatusBadge" class="text-xs px-2.5 py-0.5 rounded-full font-semibold bg-slate-100 text-slate-600">รอไฟล์</span>
+              </h3>
+              <p id="importSummaryText" class="text-xs text-slate-500 mt-0.5">กรุณาเลือกไฟล์เพื่อดูผลการตรวจสอบรายแถว</p>
+            </div>
+            <button id="commitImportBtn" onclick="commitImportData()" disabled class="bg-emerald-600 disabled:bg-slate-200 disabled:text-slate-400 text-white px-4 py-2 rounded-xl text-xs font-semibold shadow-xs transition-colors flex items-center gap-1.5">
+              💾 ยืนยันนำเข้าทุกสาขา
+            </button>
+          </div>
+
+          <!-- Error Logs if any -->
+          <div id="validationErrorsBox" class="hidden bg-rose-50 border border-rose-200 rounded-xl p-3.5 space-y-1.5 text-xs text-rose-800">
+            <div class="font-bold flex items-center gap-1.5">
+              <span>⚠️</span> พบข้อผิดพลาดที่ต้องแก้ไขก่อนนำเข้า:
+            </div>
+            <ul id="validationErrorsList" class="list-disc list-inside space-y-1 pl-1 text-rose-700">
+              <!-- Rendered by JS -->
+            </ul>
+          </div>
+
+          <!-- Data Preview Table -->
+          <div class="overflow-x-auto max-h-80 border border-slate-200 rounded-xl">
+            <table class="w-full text-left text-xs">
+              <thead id="previewTableHead" class="bg-slate-100 text-slate-700 font-semibold border-b border-slate-200 sticky top-0">
+                <!-- Headers rendered by JS -->
+              </thead>
+              <tbody id="previewTableBody" class="divide-y divide-slate-100">
+                <tr>
+                  <td colspan="6" class="p-8 text-center text-slate-400">ยังไม่มีข้อมูล กรุณาเลือกไฟล์จากคอมพิวเตอร์</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ==================================================================== -->
+    <!-- MODULE 3: DAILY PHYSICAL STOCK COUNT -->
+    <!-- ==================================================================== -->
+    <section id="tab-count" class="tab-content hidden space-y-6">
+      <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-[var(--card,#ffffff)] p-5 rounded-2xl border border-[var(--border,#e2e8f0)] shadow-xs">
+        <div>
+          <h2 class="text-lg font-bold text-[var(--foreground,#0f172a)] flex items-center gap-2">
+            📝 ตรวจนับสต็อกวัตถุดิบประจำวัน (Physical Stock Count)
+          </h2>
+          <p class="text-xs text-[var(--muted-foreground,#64748b)] mt-1">
+            เลือกสาขาและวันที่ แล้วกรอกหน่วยหลักและเศษตามชื่อหน่วยบนแต่ละช่อง ระบบแปลงและรวมยอดให้ รายการที่ไม่มีหน่วยเศษจะปิดช่องไว้ ช่องว่างหมายถึงยังไม่ได้นับ ส่วน 0 หมายถึงนับแล้วไม่เหลือ
+          </p>
+        </div>
+        <div class="flex flex-wrap items-center gap-3">
+          <label for="stockCountBranchInput" class="text-xs font-semibold text-slate-600">สาขาที่ตรวจนับ:</label>
+          <select id="stockCountBranchInput" onchange="handleCountScopeChange()" class="bg-slate-50 border border-slate-300 rounded-xl px-3 py-1.5 text-xs font-semibold text-slate-700 outline-none">
+            <option value="BR-001">สาขา สยามพารากอน (BR-001)</option>
+            <option value="BR-002">สาขา เซ็นทรัลเวิลด์ (BR-002)</option>
+          </select>
+          <input type="date" id="stockCountDateInput"  onchange="handleCountScopeChange()" class="bg-slate-50 border border-slate-300 rounded-xl px-3 py-1.5 text-xs font-semibold text-slate-700 outline-none">
+          <label for="savedCountDateSelect" class="text-xs font-semibold text-slate-600">วันที่บันทึกไว้แล้ว:</label>
+          <select id="savedCountDateSelect" onchange="openSavedCountDate(this.value)" class="bg-slate-50 border border-slate-300 rounded-xl px-3 py-1.5 text-xs"><option value="">เลือกสาขาก่อน</option></select>
+          <button onclick="savePhysicalStockCount()" class="bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-xl text-xs font-semibold shadow-xs flex items-center gap-1.5 transition-colors">
+            💾 บันทึกยอดตรวจนับ
+          </button>
+        </div>
+      </div>
+
+      <!-- Quick Search & Category Filter -->
+      <div class="flex flex-col sm:flex-row items-center justify-between gap-3">
+        <div class="relative w-full sm:w-80">
+          <span class="absolute left-3 top-2.5 text-slate-400 text-xs">🔍</span>
+          <input type="text" id="stockCountSearch" oninput="filterStockCountRows()" placeholder="ค้นหาชื่อวัตถุดิบ หรือ รหัส..." class="w-full pl-8 pr-3 py-2 bg-white border border-slate-200 rounded-xl text-xs shadow-xs outline-none focus:ring-2 focus:ring-emerald-500">
+        </div>
+        <div class="text-xs text-slate-500 font-medium">
+          <span id="countSaveStatus">เลือกสาขาก่อนกรอกข้อมูล · บันทึกยอดวันก่อนหน้าเพื่อใช้เป็นยอดยกมา</span>
+        </div>
+      </div>
+
+      <!-- Count Table -->
+      <div class="bg-[var(--card,#ffffff)] rounded-2xl border border-[var(--border,#e2e8f0)] shadow-xs overflow-hidden">
+        <div class="overflow-x-auto">
+          <table class="w-full text-left text-xs">
+            <thead class="bg-slate-100"><tr><th class="p-3">วัตถุดิบสำคัญ</th><th class="p-3">คงเหลือหน่วยหลัก</th><th class="p-3">คงเหลือเศษ</th><th class="p-3">ยอดรวมอัตโนมัติ</th><th class="p-3">สูญเสีย / หน่วย</th><th class="p-3">หมายเหตุ</th></tr></thead>
+            <tbody id="stockCountTableBody" class="divide-y divide-slate-100">
+              <!-- Rendered by JS -->
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <!-- ==================================================================== -->
+    <!-- MODULE 4: VARIANCE DASHBOARD & REPORT -->
+    <!-- ==================================================================== -->
+    <section id="tab-variance" class="tab-content hidden space-y-6">
+      <!-- Title & Header Bar -->
+      <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-[var(--card,#ffffff)] p-5 rounded-2xl border border-[var(--border,#e2e8f0)] shadow-xs">
+        <div>
+          <h2 class="text-lg font-bold text-[var(--foreground,#0f172a)] flex items-center gap-2">
+            📊 รายงานสรุปผลต่างและวิเคราะห์สต็อก (Variance Analysis Dashboard)
+          </h2>
+          <p class="text-xs text-[var(--muted-foreground,#64748b)] mt-1">
+            เปรียบเทียบสต็อกที่ควรมีตามทฤษฎี (Theoretical Ending) กับยอดตรวจนับจริง (Physical Count) เพื่อตรวจจับการใช้วัตถุดิบเกินสเปกหรือของสูญหาย
+          </p>
+        </div>
+        <div class="flex flex-wrap items-center gap-2">
+          <button onclick="exportVarianceReport()" class="bg-slate-800 hover:bg-slate-900 text-white px-3.5 py-2 rounded-xl text-xs font-semibold shadow-xs flex items-center gap-1.5 transition-colors">
+            📑 ส่งออกรายงาน Excel
+          </button>
+        </div>
+      </div>
+
+      <!-- MULTI-PERIOD FILTER CONTROLS BAR (NEW: รายวัน, รายเดือน, สรุปตั้งแต่วัน... ถึงวัน...) -->
+      <div class="bg-[var(--card,#ffffff)] p-5 rounded-2xl border border-[var(--border,#e2e8f0)] shadow-xs space-y-4">
+        <div class="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+          <!-- Left: Period Mode Tabs -->
+          <div class="flex flex-wrap items-center gap-2">
+            <span class="text-xs font-bold text-slate-500 uppercase tracking-wider mr-1">เลือกช่วงเวลา:</span>
+            <button onclick="setVariancePeriodMode('daily')" id="btn-period-daily" class="period-btn px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all bg-emerald-600 text-white shadow-xs">
+              📅 เปรียบเทียบรายวัน (Daily)
+            </button>
+            <button onclick="setVariancePeriodMode('monthly')" id="btn-period-monthly" class="period-btn px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all bg-slate-100 text-slate-700 hover:bg-slate-200">
+              🗓️ เปรียบเทียบรายเดือน (Monthly)
+            </button>
+            <button onclick="setVariancePeriodMode('custom')" id="btn-period-custom" class="period-btn px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all bg-slate-100 text-slate-700 hover:bg-slate-200">
+              📆 สรุปช่วงวัน (ตั้งแต่วัน... ถึงวัน...)
+            </button>
+          </div>
+
+          <!-- Right: Sub-View Switcher (Summary Table vs Daily Breakdown) -->
+          <div class="flex items-center gap-1 bg-slate-100 p-1 rounded-xl border border-slate-200 text-xs">
+            <button onclick="setVarianceViewType('summary')" id="btn-view-summary" class="px-3 py-1.5 rounded-lg font-bold bg-white text-slate-800 shadow-xs transition-all">
+              📊 ตารางสรุปรวม (Summary)
+            </button>
+            <button onclick="setVarianceViewType('trend')" id="btn-view-trend" class="px-3 py-1.5 rounded-lg font-bold text-slate-600 hover:text-slate-900 transition-all">
+              📈 แจกแจงเปรียบเทียบรายวัน (Daily Trend)
+            </button>
+          </div>
+        </div>
+
+        <!-- Dynamic Filter Inputs -->
+        <div class="pt-3 border-t border-slate-100 flex flex-wrap items-center justify-between gap-4">
+          <div class="flex flex-wrap items-center gap-3">
+            <!-- Mode 1: Daily Input -->
+            <div id="filterInputDaily" class="flex items-center gap-2">
+              <label class="text-xs font-semibold text-slate-600">เลือกวันที่:</label>
+              <input type="date" id="varianceDailyInput"  onchange="handleVarianceFilterChange()" class="bg-slate-50 border border-slate-300 rounded-xl px-3 py-1.5 text-xs font-semibold text-slate-800 outline-none focus:ring-2 focus:ring-emerald-500">
+              <div class="flex items-center gap-1">
+                <button onclick="quickSetDaily(relativeLocalDate(0))" class="text-xs bg-slate-100 hover:bg-slate-200 px-2.5 py-1 rounded-lg font-medium text-slate-700">วันนี้</button>
+                <button onclick="quickSetDaily(relativeLocalDate(-1))" class="text-xs bg-slate-100 hover:bg-slate-200 px-2.5 py-1 rounded-lg font-medium text-slate-700">เมื่อวาน</button>
+                <button onclick="quickSetDaily(relativeLocalDate(-2))" class="text-xs bg-slate-100 hover:bg-slate-200 px-2.5 py-1 rounded-lg font-medium text-slate-700">2 วันก่อน</button>
+                <button onclick="quickSetDaily(relativeLocalDate(-3))" class="text-xs bg-slate-100 hover:bg-slate-200 px-2.5 py-1 rounded-lg font-medium text-slate-700">3 วันก่อน</button>
+              </div>
+            </div>
+
+            <!-- Mode 2: Monthly Input -->
+            <div id="filterInputMonthly" class="hidden flex items-center gap-2">
+              <label class="text-xs font-semibold text-slate-600">เลือกเดือน:</label>
+              <select id="varianceMonthInput" onchange="handleVarianceFilterChange()" class="bg-slate-50 border border-slate-300 rounded-xl px-3 py-1.5 text-xs font-semibold text-slate-800 outline-none focus:ring-2 focus:ring-emerald-500">
+                <option value="2026-10">ตุลาคม 2026 (Month-to-Date)</option>
+                <option value="2026-09">กันยายน 2026 (สรุปเต็มเดือน)</option>
+                <option value="2026-08">สิงหาคม 2026 (สรุปเต็มเดือน)</option>
+              </select>
+            </div>
+
+            <!-- Mode 3: Custom Date Range Input -->
+            <div id="filterInputCustom" class="hidden flex flex-wrap items-center gap-2">
+              <label class="text-xs font-semibold text-slate-600">ตั้งแต่วันที่:</label>
+              <input type="date" id="varianceStartDateInput"  onchange="handleVarianceFilterChange()" class="bg-slate-50 border border-slate-300 rounded-xl px-3 py-1.5 text-xs font-semibold text-slate-800 outline-none focus:ring-2 focus:ring-emerald-500">
+              <span class="text-xs text-slate-400 font-bold px-1">ถึง</span>
+              <label class="text-xs font-semibold text-slate-600">วันที่:</label>
+              <input type="date" id="varianceEndDateInput"  onchange="handleVarianceFilterChange()" class="bg-slate-50 border border-slate-300 rounded-xl px-3 py-1.5 text-xs font-semibold text-slate-800 outline-none focus:ring-2 focus:ring-emerald-500">
+              <div class="flex items-center gap-1 ml-1">
+                <button onclick="quickSetRange('7days')" class="text-xs bg-slate-100 hover:bg-slate-200 px-2.5 py-1 rounded-lg font-medium text-slate-700">7 วันล่าสุด</button>
+                <button onclick="quickSetRange('mtd')" class="text-xs bg-slate-100 hover:bg-slate-200 px-2.5 py-1 rounded-lg font-medium text-slate-700">1 - 11 ต.ค.</button>
+              </div>
+            </div>
+          </div>
+
+          <!-- Branch Filter -->
+          <div class="flex items-center gap-2">
+            <label class="text-xs font-semibold text-slate-600">สาขา:</label>
+            <select id="varianceBranchInput" onchange="handleVarianceFilterChange()" class="bg-slate-50 border border-slate-300 rounded-xl px-3 py-1.5 text-xs font-semibold text-slate-800 outline-none focus:ring-2 focus:ring-emerald-500">
+              <option value="BR-001">สาขา สยามพารากอน</option>
+              <option value="BR-002">สาขา เซ็นทรัลเวิลด์</option>
+              <option value="ALL">ทุกสาขา (แสดงแยกสาขา)</option>
+            </select>
+          </div>
+        </div>
+      </div>
+
+      <!-- Period Badge & Calculation Status Banner -->
+      <div class="flex flex-col sm:flex-row sm:items-center justify-between text-xs bg-slate-100/80 px-4 py-2.5 rounded-xl border border-slate-200 gap-2">
+        <div class="flex items-center gap-2">
+          <span class="font-bold text-slate-700">ช่วงเวลาที่ประมวลผล:</span>
+          <span id="activePeriodLabel" class="bg-emerald-100 text-emerald-800 font-semibold px-2.5 py-0.5 rounded-full">รายวัน: 11 ตุลาคม 2026</span>
+          <span id="activeBranchLabel" class="bg-slate-200 text-slate-700 font-semibold px-2 py-0.5 rounded-md">สาขา สยามพารากอน</span>
+        </div>
+        <div class="text-slate-500 text-xs">
+          <strong>สูตร:</strong> สต็อกควรมี = ยกมา + รับเข้า − จ่ายออก − สูญเสีย − ตัดตามสูตร<br>ผลต่าง = ยอดนับจริง − สต็อกควรมี · % = ผลต่าง ÷ ใช้ตาม BOM × 100 · ค่าลบ = ใช้เกินสูตร / ค่าบวก = ใช้น้อยกว่าสูตร
+        </div>
+      </div>
+
+      <p id="reportReadiness" class="text-sm bg-amber-50 border border-amber-200 rounded-xl p-3">รอข้อมูลส่วนกลางและยอดตรวจนับ</p>
+      <!-- KPI Summary Cards -->
+      <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        <!-- Card 1: Theoretical Cost -->
+        <div class="bg-[var(--card,#ffffff)] p-5 rounded-2xl border border-[var(--border,#e2e8f0)] shadow-xs">
+          <div class="text-xs font-bold uppercase tracking-wider text-slate-400">รายการที่คำนวณปริมาณได้</div>
+          <div id="kpiTheoryCost" class="text-2xl font-bold text-slate-800 mt-2">0</div>
+          <div id="kpiSalesContextText" class="text-xs text-slate-500 mt-1">คำนวณจากยอดขายจริง × BOM สูตรอาหาร</div>
+        </div>
+
+        <!-- Card 2: Net Variance Value -->
+        <div class="bg-[var(--card,#ffffff)] p-5 rounded-2xl border border-[var(--border,#e2e8f0)] shadow-xs">
+          <div class="text-xs font-bold uppercase tracking-wider text-slate-400">รายการที่ใช้น้อยกว่าสูตร</div>
+          <div id="kpiNetVarianceCost" class="text-2xl font-bold text-rose-600 mt-2">0</div>
+          <div id="kpiVarianceDirectionText" class="text-xs text-rose-500 mt-1 font-medium flex items-center gap-1">
+            📉 วัตถุดิบสูญหาย / ใช้เกินสเปก
+          </div>
+        </div>
+
+        <!-- Card 3: % Variance -->
+        <div class="bg-[var(--card,#ffffff)] p-5 rounded-2xl border border-[var(--border,#e2e8f0)] shadow-xs">
+          <div class="text-xs font-bold uppercase tracking-wider text-slate-400">รายการที่ข้อมูลยังไม่ครบ</div>
+          <div id="kpiVariancePct" class="text-2xl font-bold text-amber-600 mt-2">0.0%</div>
+          <div class="text-xs text-slate-500 mt-1">รอไฟล์ส่วนกลาง สูตรอาหาร หรือยอดตรวจนับ</div>
+        </div>
+
+        <!-- Card 4: Critical Items -->
+        <div class="bg-[var(--card,#ffffff)] p-5 rounded-2xl border border-[var(--border,#e2e8f0)] shadow-xs">
+          <div class="text-xs font-bold uppercase tracking-wider text-slate-400">รายการใช้เกินสูตร</div>
+          <div id="kpiWarningItemsCount" class="text-2xl font-bold text-rose-700 mt-2">0 รายการ</div>
+          <div class="text-xs text-rose-500 mt-1">นับรายการที่ใช้จริงมากกว่ายอดตามสูตร</div>
+        </div>
+      </div>
+
+      <!-- VIEW 1: SUMMARY TABLE (เมื่อเลือกตารางสรุปรวม) -->
+      <div id="varianceSummaryTableView" class="space-y-4">
+        <div class="bg-[var(--card,#ffffff)] rounded-2xl border border-[var(--border,#e2e8f0)] shadow-xs overflow-hidden">
+          <div class="p-3.5 bg-slate-50/70 border-b border-slate-200 flex items-center justify-between">
+            <span class="text-xs font-bold text-slate-700">ตารางสรุปผลต่างสต็อกตามช่วงเวลา</span>
+            <span class="text-xs text-slate-400 font-mono">หน่วยฐาน (Base Unit)</span>
+          </div>
+          <div class="overflow-x-auto">
+            <table class="w-full text-left text-xs">
+              <thead class="bg-slate-100"><tr><th class="p-3 whitespace-nowrap ">วัตถุดิบ (Raw Material)</th><th class="p-3 whitespace-nowrap ">ยกมา (Opening)</th><th class="p-3 whitespace-nowrap stock-in">รับเข้า (+)</th><th class="p-3 whitespace-nowrap stock-out">จ่ายออก (−)</th><th class="p-3 whitespace-nowrap stock-out">สูญเสีย (−)</th><th class="p-3 whitespace-nowrap stock-bom">ตัดตามสูตร (−)</th><th class="p-3 whitespace-nowrap stock-theory">สต็อกควรมี</th><th class="p-3 whitespace-nowrap stock-actual">ยอดนับจริง</th><th class="p-3 whitespace-nowrap ">ผลต่าง (Qty)</th><th class="p-3 whitespace-nowrap">การใช้ขาด/เกิน (%)<div class="text-xs font-normal text-slate-500">← ใช้น้อย (−) · ใช้เกิน (+) →<br>(ควรเหลือ − นับจริง) ÷ BOM × 100<br>แถบเต็มที่ ±100%</div></th><th class="p-3 whitespace-nowrap ">สถานะ</th></tr></thead>
+              <tbody id="varianceTableBody" class="divide-y divide-slate-100">
+                <!-- Rendered by JS -->
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <!-- VIEW 2: DAILY BREAKDOWN & TREND TABLE (เมื่อเลือกดูเปรียบเทียบรายวัน) -->
+      <div id="varianceTrendTableView" class="hidden space-y-4">
+        <div class="bg-[var(--card,#ffffff)] rounded-2xl border border-[var(--border,#e2e8f0)] shadow-xs overflow-hidden">
+          <div class="p-3.5 bg-slate-50/70 border-b border-slate-200 flex items-center justify-between">
+            <div class="text-xs font-bold text-slate-700">ตารางแจกแจงเปรียบเทียบผลต่างรายวัน (Day-by-Day Variance Matrix)</div>
+            <span class="text-xs text-slate-500">ช่วยระบุวันที่เกิดความผิดปกติหรือของสูญหายได้ทันที</span>
+          </div>
+          <div class="overflow-x-auto">
+            <table class="w-full text-left text-xs">
+              <thead class="bg-slate-100"><tr><th class="p-3 whitespace-nowrap">วันที่</th><th class="p-3 whitespace-nowrap ">วัตถุดิบ (Raw Material)</th><th class="p-3 whitespace-nowrap ">ยกมา (Opening)</th><th class="p-3 whitespace-nowrap stock-in">รับเข้า (+)</th><th class="p-3 whitespace-nowrap stock-out">จ่ายออก (−)</th><th class="p-3 whitespace-nowrap stock-out">สูญเสีย (−)</th><th class="p-3 whitespace-nowrap stock-bom">ตัดตามสูตร (−)</th><th class="p-3 whitespace-nowrap stock-theory">สต็อกควรมี</th><th class="p-3 whitespace-nowrap stock-actual">ยอดนับจริง</th><th class="p-3 whitespace-nowrap ">ผลต่าง (Qty)</th><th class="p-3 whitespace-nowrap">การใช้ขาด/เกิน (%)<div class="text-xs font-normal text-slate-500">← ใช้น้อย (−) · ใช้เกิน (+) →<br>(ควรเหลือ − นับจริง) ÷ BOM × 100<br>แถบเต็มที่ ±100%</div></th><th class="p-3 whitespace-nowrap ">สถานะ</th></tr></thead>
+              <tbody id="varianceDailyBreakdownTableBody" class="divide-y divide-slate-100">
+                <!-- Rendered by JS -->
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section id="tab-branch-check" class="tab-content hidden space-y-5">
+      <style>
+        .bc-controls{display:flex;flex-wrap:wrap;gap:16px;align-items:end}.bc-controls input,.bc-controls select{display:block;padding:8px;border:1px solid #cbd5e1;border-radius:8px}
+        #branchCheckSources{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:12px}
+        .bc-source{padding:14px;border:1px solid #dbe3ee;border-radius:12px;font-size:13px}.bc-source p{margin:8px 0;overflow-wrap:anywhere}
+        .bc-source button,.bc-upload{display:inline-block;margin-top:6px;border:1px solid #cbd5e1;border-radius:6px;padding:6px;cursor:pointer}.bc-upload input{display:block;max-width:220px}
+        .bc-table{width:100%;min-width:1400px;font-size:13px;border-collapse:collapse}.bc-table th{background:#f1f5f9;padding:12px;position:sticky;top:0}.bc-table td{padding:12px;border-bottom:1px solid #e2e8f0;vertical-align:top}.bc-table small{display:block;color:#64748b;margin-top:5px}.bc-table td:first-child{min-width:220px}
+        .bc-results{width:100%;min-width:1100px;table-layout:fixed;border-collapse:separate;border-spacing:0;border-top:1px solid #cbd5e1;border-left:1px solid #cbd5e1;font-size:13px}
+        .bc-results th,.bc-results td{padding:7px 8px;border-right:1px solid #cbd5e1;border-bottom:1px solid #cbd5e1;vertical-align:middle;overflow-wrap:anywhere}
+        .bc-results th{background:#e8eef5;position:sticky;top:0;z-index:2;text-align:center;padding:10px 6px}
+        .bc-results td{background:#fff}.bc-results tr:nth-child(even) td{background:#f8fafc}.bc-results td[data-result]{text-align:right;font-variant-numeric:tabular-nums}
+        .bc-results small{display:block;color:#64748b;font-size:11px;margin-top:3px}.bc-results td:first-child{position:sticky;left:0;z-index:1}.bc-results th:first-child{left:0;z-index:3}
+        .bc-count{display:flex;align-items:center;justify-content:space-between;gap:5px;font-size:10px;line-height:1.3;margin:3px 0}.bc-count input{flex:0 0 62px;min-width:0;width:62px;padding:5px 3px;border:1px solid #cbd5e1;border-radius:4px;font-size:13px;text-align:right;background:white}
+        .bc-count input:focus{outline:2px solid #10b981;outline-offset:1px}
+
+      </style>
+      <div class="bg-white rounded-2xl border p-5 space-y-3">
+        <h2 class="text-lg font-bold">ตรวจสต็อกก่อนปิดวัน</h2>
+        <p class="text-sm text-slate-600">1. เลือกวัน → 2. อัปโหลดไฟล์ของสาขา → 3. ตรวจยอดขาด/เกิน → 4. นำยอดนับไปบันทึกในหน้า 3</p>
+        <p class="text-sm text-slate-600">ไฟล์ที่สาขาอัปโหลดจะรวมทุกรายการของสาขาที่เลือก โดยใช้วันที่บนหน้าจอ ไม่ตรวจวันที่ในไฟล์ หากไฟล์มีหลายวัน ยอดทั้งหมดจะรวมเป็นวันที่เลือก</p>
+        <p class="rounded-lg bg-amber-50 p-3 text-sm">หน้านี้ใช้ทดลองตรวจในเครื่อง ยังไม่บันทึกลงส่วนกลาง เปลี่ยนสาขา/วันที่ รีเฟรช หรือออกจากระบบจะล้างข้อมูลทดลอง ใช้เฉพาะไฟล์ที่สาขาอัปโหลด ไม่ดึงยอดขาย รับเข้า หรือจ่ายออกจาก Admin เมื่อเช็คเสร็จให้นำยอดไปบันทึกในหน้า 3</p>
+        <div class="bc-controls">
+          <label>สาขา<select id="branchCheckBranch" onchange="renderBranchCheck()"></select></label>
+          <label>วันที่ตรวจ<input id="branchCheckDate" type="date" onchange="renderBranchCheck()"></label>
+          <button onclick="exportBranchCheck()" class="bg-emerald-600 text-white rounded-lg p-2">ส่งออกผลตรวจ Excel</button>
+        </div>
+        <p class="text-sm text-slate-600">ไฟล์ยอดขายสรุปที่ไม่มีรหัสสาขา ใช้สาขาที่เลือกด้านบนอัตโนมัติ อ่านจำนวนขายจากคอลัมน์ Number ไม่ต้องแก้ไฟล์ Excel</p>
+        <details><summary class="cursor-pointer text-sm text-slate-600">ไฟล์ประเภทอื่นไม่มีรหัสสาขา หรือไฟล์ระบุสาขาไม่ครบทุกแถว</summary>
+          <label class="block text-sm mt-2"><input id="branchCheckUnscoped" type="checkbox"> ยืนยันว่าไฟล์ที่กำลังเลือกเป็นของสาขาด้านบนเท่านั้น</label>
+        </details>
+        <div id="branchCheckSources"></div>
+        <p id="branchCheckMessage" role="status" class="text-sm text-slate-600"></p>
+        <div class="border-t pt-4 space-y-3">
+          <h3 class="font-semibold">รายละเอียดไฟล์ที่สาขาอัปโหลด</h3>
+          <div class="bc-controls">
+            <label>ประเภทไฟล์<select id="branchFileDetailType" onchange="renderBranchFileDetails(true)"><option value="SALES">ยอดขาย</option><option value="STOCK_IN">itec in</option><option value="STOCK_OUT">itec out</option><option value="EXTRA_IN">เครื่องดื่ม in</option></select></label>
+            <label>ค้นหาในไฟล์<input id="branchFileDetailSearch" type="search" placeholder="รหัสสินค้า ชื่อสินค้า เลขเอกสาร…" oninput="renderBranchFileDetails(true)"></label>
+          </div>
+          <p id="branchFileDetailInfo" role="status" class="text-sm text-slate-600">ยังไม่ได้อัปโหลดไฟล์</p>
+          <p class="text-xs text-slate-500">แสดงข้อมูลต้นฉบับเฉพาะแถวของสาขาที่เลือก วันที่ในตารางแสดงไว้ให้ตรวจดูเท่านั้น ระบบยังใช้วันที่ที่เลือกด้านบนในการคำนวณ เลื่อนแนวนอนเพื่อดูทุกคอลัมน์</p>
+          <div style="overflow:auto;max-height:420px"><table class="bc-table"><thead id="branchFileDetailHead"></thead><tbody id="branchFileDetailBody"></tbody></table></div>
+          <div class="flex items-center gap-3 text-sm">
+            <button id="branchFileDetailPrev" disabled class="border rounded p-2 disabled:opacity-40" onclick="changeBranchFileDetailPage(-1)">ก่อนหน้า</button>
+            <span id="branchFileDetailPage"></span>
+            <button id="branchFileDetailNext" disabled class="border rounded p-2 disabled:opacity-40" onclick="changeBranchFileDetailPage(1)">ถัดไป</button>
+          </div>
+        </div>
+      </div>
+      <div class="bg-white rounded-2xl border p-5 space-y-3">
+        <p class="text-sm">ควรเหลือ = ยกมา + รับเข้า − จ่ายออก − สูญเสีย − ยอดขาย × BOM ปัจจุบัน · ผลต่าง = นับจริง − ควรเหลือ</p>
+        <p class="text-xs text-slate-600">ยอดยกมาใช้ยอดนับวันก่อนจากหน้า 3 หากเคยบันทึกยอดนับวันนี้ไว้จะแสดงให้ตรวจแก้ได้ สูตร BOM และหน่วยใช้ชุดเดียวกับระบบ แก้เพื่อทดลองได้ ช่องว่างคือยังไม่ทราบยอด ส่วน 0 คือไม่มีของ สูญเสียเว้นว่างถือว่า 0 หน่วยในตารางผลลัพธ์ใช้หน่วยฐานของ BOM</p>
+        <p id="branchCheckSummary" role="status" class="font-semibold"></p>
+        <div style="overflow-x:auto"><table class="bc-results"><colgroup><col style="width:24%"><col style="width:14%"><col style="width:6%"><col style="width:6%"><col style="width:8%"><col style="width:12%"><col style="width:8%"><col style="width:14%"><col style="width:8%"></colgroup><thead><tr><th>วัตถุดิบ</th><th>ยกมา<small id="branchOpeningDate"></small></th><th>itec in + เครื่องดื่ม in</th><th>itec out</th><th>ใช้ตาม BOM</th><th>สูญเสีย</th><th>ควรเหลือ</th><th>นับจริง</th><th>ผลต่าง</th></tr></thead><tbody id="branchCheckBody"></tbody></table></div>
+        <button onclick="transferBranchCheckCounts()" class="bg-emerald-600 text-white rounded-lg p-3">นำยอดนับไปหน้า 3</button>
+      </div>
+    </section>
+    <section id="tab-stock-overview" class="tab-content hidden space-y-5">
+      <div class="bg-white rounded-2xl border p-5 space-y-4">
+        <h2 class="text-lg font-bold">สต็อกคงเหลือแต่ละสาขา</h2>
+        <p class="text-sm text-slate-600">ยอดนับจริงที่บันทึกในหน้า 3 ไม่รวมฉบับร่าง หากวันที่เลือกยังไม่บันทึก จะแสดงยอดบันทึกล่าสุดก่อนวันนั้น พร้อมระบุวันที่บนหัวคอลัมน์ ยอด 0 หมายถึงบันทึกแล้วว่าไม่มีของ</p>
+        <div class="flex flex-wrap gap-4 items-end">
+          <label>วันที่ดูยอด<input id="stockOverviewDate" type="date" onchange="renderStockOverview()" class="block border rounded-lg p-2"></label>
+          <label>สาขา<select id="stockOverviewBranch" onchange="renderStockOverview()" class="block border rounded-lg p-2"><option value="ALL">ทุกสาขา</option></select></label>
+          <label>ค้นหาวัตถุดิบ<input id="stockOverviewSearch" type="search" oninput="renderStockOverview()" placeholder="ชื่อหรือรหัสวัตถุดิบ" class="block border rounded-lg p-2"></label>
+        </div>
+        <p id="stockOverviewSummary" role="status" class="text-sm text-slate-600"></p>
+        <div style="overflow-x:auto"><table class="stock-overview-table"><thead id="stockOverviewHead"></thead><tbody id="stockOverviewBody"></tbody></table></div>
+      </div>
+      <style>.stock-overview-table{width:100%;border-collapse:separate;border-spacing:0;font-size:13px}.stock-overview-table th,.stock-overview-table td{padding:10px;border-bottom:1px solid #dbe3ee;border-right:1px solid #dbe3ee;min-width:150px}.stock-overview-table th{background:#eef2f7}.stock-overview-table th:first-child,.stock-overview-table td:first-child{position:sticky;left:0;min-width:240px;background:#f8fafc}.stock-overview-table td{text-align:right}.stock-overview-table td:first-child{text-align:left}.stock-overview-table small{display:block;color:#64748b}.stock-overview-table .pending{color:#94a3b8;font-size:12px}</style>
+    </section>
+    <section id="tab-restore" class="tab-content hidden space-y-5">
+      <div class="bg-white border border-slate-200 rounded-2xl p-6 space-y-4">
+        <h2 class="text-lg font-bold">นำไฟล์สำรอง JSON กลับมาดูรายงานย้อนหลัง</h2>
+        <p class="text-sm text-slate-600">สำหรับส่วนกลาง: เลือกไฟล์สำรองที่ดาวน์โหลดก่อนลบข้อมูล ตรวจรายการ แล้วกู้คืนเข้า Supabase เพื่อเปิดรายงานในหน้า 4 สูตรคำนวณใช้ BOM ปัจจุบัน ไฟล์สำรองเก่าไม่ได้เก็บสูตรและอาจไม่มียอดยกมาครบ</p>
+        <input id="restoreFile" type="file" accept=".json,application/json" onchange="previewRestoreFile(this.files[0])" class="block w-full text-sm">
+        <div id="restorePreview" role="status" aria-live="polite" class="bg-slate-50 rounded-xl p-4 text-sm">เลือกไฟล์ JSON เพื่อเริ่มตรวจสอบ</div>
+        <label class="block text-sm"><input id="restoreOverwrite" type="checkbox" onchange="updateRestoreButton()"> อนุญาตแทนที่รายการที่ต่างจากข้อมูลปัจจุบัน (ข้อมูลนำเข้าจะถูกแทนที่ทั้งชุดของประเภท/สาขา/เดือนนั้น รวมวันนอกช่วงที่เคยลบ)</label>
+        <button id="restoreBackup" disabled onclick="downloadRestoreSafetyBackup()" class="border rounded-lg px-3 py-2 disabled:opacity-40">1. ดาวน์โหลดสำรองข้อมูลปัจจุบันก่อนกู้คืน</button>
+        <label class="block text-sm"><input id="restoreBackupSaved" type="checkbox" disabled onchange="updateRestoreButton()"> เก็บไฟล์สำรองข้อมูลปัจจุบันแล้ว</label>
+        <button id="restoreCommit" disabled onclick="commitRestore()" class="bg-emerald-600 text-white rounded-lg px-4 py-2 disabled:opacity-40">2. ยืนยันกู้คืนข้อมูล</button>
+        <button id="restoreReport" hidden onclick="openRestoredReport()" class="border rounded-lg px-4 py-2">เปิดรายงานย้อนหลัง หน้า 4</button>
+      </div>
+    </section>
+  </main>
+
+  <!-- ==================================================================== -->
+  <!-- JAVASCRIPT STATE & APPLICATION ENGINE -->
+  <!-- ==================================================================== -->
+  <script>
+    // 1. MASTER STATE & SEED DATA
+    function localDateString(date=new Date()) {
+      return `${date.getFullYear()}-${String(date.getMonth()+1).padStart(2,'0')}-${String(date.getDate()).padStart(2,'0')}`;
+    }
+    function relativeLocalDate(offset=0) {
+      const date=new Date();date.setDate(date.getDate()+offset);return localDateString(date);
+    }
+    function initializeCurrentDates() {
+      const today=localDateString(),start=today.slice(0,7)+'-01';
+      for(const id of ['stockCountDateInput','varianceDailyInput','varianceEndDateInput','branchCheckDate','stockOverviewDate'])document.getElementById(id).value=today;
+      document.getElementById('varianceStartDateInput').value=start;
+      document.getElementById('varianceMonthInput').innerHTML=`<option value="${today.slice(0,7)}">${today.slice(0,7)}</option>`;
+      appState.countDate=today;appState.currentDate=today;
+      Object.assign(appState.varianceFilter,{dailyDate:today,monthlyMonth:today.slice(0,7),startDate:start,endDate:today});
+    }
+    const appState = {
+      countBranch: 'BR-001',
+      countDate: localDateString(),
+      countDrafts: {},
+      currentDate: localDateString(),
+      selectedMenuId: 'mn-1',
+      
+      // วัตถุดิบหลัก (Raw Materials)
+      materials: [
+        {
+          id: 'rm-salmon',
+          code: 'RM-SALMON-RAW',
+          name: 'ปลาแซลมอนนอร์เวย์สด (Salmon)',
+          category: 'เนื้อสัตว์และอาหารสด',
+          baseUnit: 'g',
+          mainUnit: 'kg',
+          mainFactor: 1000,
+          subUnit: 'g',
+          subFactor: 1,
+          costPerBase: 0.45, // 450 บาท/กก. (0.45 บาท/กรัม)
+        },
+        {
+          id: 'rm-beef',
+          code: 'RM-BEEF-RIBEYE',
+          name: 'เนื้อริบอายออสเตรเลีย (Ribeye Beef)',
+          category: 'เนื้อสัตว์และอาหารสด',
+          baseUnit: 'g',
+          mainUnit: 'kg',
+          mainFactor: 1000,
+          subUnit: 'g',
+          subFactor: 1,
+          costPerBase: 0.90, // 900 บาท/กก.
+        },
+        {
+          id: 'rm-butter',
+          code: 'RM-BUTTER-PURE',
+          name: 'เนยสดแท้ชนิดจืด (Pure Butter)',
+          category: 'เนยและผลิตภัณฑ์นม',
+          baseUnit: 'g',
+          mainUnit: 'บล็อก (kg)',
+          mainFactor: 1000,
+          subUnit: 'g',
+          subFactor: 1,
+          costPerBase: 0.32, // 320 บาท/กก.
+        },
+        {
+          id: 'rm-cola',
+          code: 'RM-COLA-CAN',
+          name: 'โค้กกระป๋อง Original (330ml Can)',
+          category: 'เครื่องดื่ม',
+          baseUnit: 'กระป๋อง',
+          mainUnit: 'ลัง (24 กป.)',
+          mainFactor: 24,
+          subUnit: 'กระป๋อง',
+          subFactor: 1,
+          costPerBase: 13.50, // 13.50 บาท/กระป๋อง
+        },
+        {
+          id: 'rm-fries',
+          code: 'RM-FRIES-FROZEN',
+          name: 'มันฝรั่งทอดแช่แข็ง (French Fries)',
+          category: 'ของทอดและแปรรูป',
+          baseUnit: 'g',
+          mainUnit: 'ถุง (2.5 kg)',
+          mainFactor: 2500,
+          subUnit: 'g',
+          subFactor: 1,
+          costPerBase: 0.12, // 120 บาท/กก.
+        }
+      ],
+
+      // เมนูอาหาร POS และสูตร BOM (Recipe BOM)
+      recipes: [
+        {
+          menuId: 'mn-1',
+          menuCode: 'MN-SALMON-01',
+          menuName: 'สเต็กแซลมอนย่างเกลือ (Grilled Salmon Steak)',
+          sellingPrice: 350.00,
+          items: [
+            { materialId: 'rm-salmon', netQty: 200, yieldRate: 80.0 }, // 200g net, yield 80% => gross 250g
+            { materialId: 'rm-butter', netQty: 25, yieldRate: 100.0 },
+            { materialId: 'rm-fries', netQty: 100, yieldRate: 95.0 }
+          ]
+        },
+        {
+          menuId: 'mn-2',
+          menuCode: 'MN-RIBEYE-01',
+          menuName: 'สเต็กเนื้อริบอายพรีเมียม (Australian Ribeye 250g)',
+          sellingPrice: 590.00,
+          items: [
+            { materialId: 'rm-beef', netQty: 250, yieldRate: 85.0 }, // yield 85% => gross 294.1g
+            { materialId: 'rm-butter', netQty: 30, yieldRate: 100.0 },
+            { materialId: 'rm-fries', netQty: 120, yieldRate: 95.0 }
+          ]
+        },
+        {
+          menuId: 'mn-3',
+          menuCode: 'MN-COLA-CAN',
+          menuName: 'โค้กเย็นพร้อมเสิร์ฟ (Iced Coca-Cola Can)',
+          sellingPrice: 45.00,
+          items: [
+            { materialId: 'rm-cola', netQty: 1, yieldRate: 100.0 }
+          ]
+        }
+      ],
+
+      // ข้อมูลตัวกรองสำหรับหน้า Variance Dashboard
+      varianceFilter: {
+        periodMode: 'daily',    // 'daily' | 'monthly' | 'custom'
+        dailyDate: localDateString(),
+        monthlyMonth: localDateString().slice(0,7),
+        startDate: localDateString().slice(0,7)+'-01',
+        endDate: localDateString(),
+        branch: 'BR-001',
+        viewType: 'summary',    // 'summary' | 'trend'
+      },
+
+      // ข้อมูลสต็อกประจำวันของแต่ละวัตถุดิบ (Base Units) สำหรับวันปัจจุบัน
+      dailyStock: {
+        'rm-salmon': { opening: 5000, in: 15000, out: 600, actualCount: 6400, remarks: '' },
+        'rm-beef':   { opening: 8000, in: 20000, out: 1000, actualCount: 9800, remarks: 'มีตัดแต่งส่วนเอ็นเพิ่ม' },
+        'rm-butter': { opening: 3000, in: 5000, out: 100, actualCount: 5200, remarks: '' },
+        'rm-cola':   { opening: 48, in: 120, out: 0, actualCount: 53, remarks: '' },
+        'rm-fries':  { opening: 10000, in: 25000, out: 500, actualCount: 22800, remarks: '' }
+      },
+
+      // ยอดขาย POS ประจำวัน (Sales) สำหรับวันปัจจุบัน
+      dailySales: [
+        { menuId: 'mn-1', qtySold: 50 },  // แซลมอน 50 จาน
+        { menuId: 'mn-2', qtySold: 40 },  // ริบอาย 40 จาน
+        { menuId: 'mn-3', qtySold: 115 }  // โค้ก 115 กระป๋อง
+      ],
+
+      // ตารางสำหรับพนักงานนับ (Count inputs)
+      countInputs: {
+        'rm-salmon': { main: 6, sub: 400, remarks: '' }, // 6 kg + 400 g = 6,400 g
+        'rm-beef':   { main: 9, sub: 800, remarks: 'มีตัดแต่งส่วนเอ็นเพิ่ม' }, // 9 kg + 800 g = 9,800 g
+        'rm-butter': { main: 5, sub: 200, remarks: '' },
+        'rm-cola':   { main: 2, sub: 5, remarks: '' },   // 2 ลัง (48) + 5 กป = 53
+        'rm-fries':  { main: 9, sub: 300, remarks: '' }
+      },
+
+      // ประวัติข้อมูลย้อนหลังรายวัน (Historical Daily Timeline for Variance Comparisons)
+      dailyHistory: {
+        '2026-10-11': {
+          sales: [{ menuId: 'mn-1', qtySold: 50 }, { menuId: 'mn-2', qtySold: 40 }, { menuId: 'mn-3', qtySold: 115 }],
+          stocks: {
+            'rm-salmon': { opening: 5000, in: 15000, out: 600, actualCount: 6400, remarks: '' },
+            'rm-beef':   { opening: 8000, in: 20000, out: 1000, actualCount: 9800, remarks: 'มีตัดแต่งส่วนเอ็นเพิ่ม' },
+            'rm-butter': { opening: 3000, in: 5000, out: 100, actualCount: 5200, remarks: '' },
+            'rm-cola':   { opening: 48, in: 120, out: 0, actualCount: 53, remarks: '' },
+            'rm-fries':  { opening: 10000, in: 25000, out: 500, actualCount: 22800, remarks: '' }
+          }
+        },
+        '2026-10-10': {
+          sales: [{ menuId: 'mn-1', qtySold: 42 }, { menuId: 'mn-2', qtySold: 35 }, { menuId: 'mn-3', qtySold: 92 }],
+          stocks: {
+            'rm-salmon': { opening: 4200, in: 12000, out: 400, actualCount: 5000, remarks: '' },
+            'rm-beef':   { opening: 7500, in: 18000, out: 800, actualCount: 14000, remarks: '' },
+            'rm-butter': { opening: 2800, in: 4000, out: 80, actualCount: 4550, remarks: '' },
+            'rm-cola':   { opening: 40, in: 100, out: 0, actualCount: 48, remarks: '' },
+            'rm-fries':  { opening: 9000, in: 20000, out: 300, actualCount: 19500, remarks: '' }
+          }
+        },
+        '2026-10-09': {
+          sales: [{ menuId: 'mn-1', qtySold: 38 }, { menuId: 'mn-2', qtySold: 30 }, { menuId: 'mn-3', qtySold: 70 }],
+          stocks: {
+            'rm-salmon': { opening: 3500, in: 10000, out: 200, actualCount: 3750, remarks: '' },
+            'rm-beef':   { opening: 6000, in: 15000, out: 500, actualCount: 11500, remarks: '' },
+            'rm-butter': { opening: 2500, in: 3000, out: 50, actualCount: 3580, remarks: '' },
+            'rm-cola':   { opening: 30, in: 80, out: 0, actualCount: 40, remarks: '' },
+            'rm-fries':  { opening: 8000, in: 15000, out: 200, actualCount: 15200, remarks: '' }
+          }
+        },
+        '2026-10-08': {
+          sales: [{ menuId: 'mn-1', qtySold: 32 }, { menuId: 'mn-2', qtySold: 28 }, { menuId: 'mn-3', qtySold: 55 }],
+          stocks: {
+            'rm-salmon': { opening: 4000, in: 8000, out: 150, actualCount: 3800, remarks: '' },
+            'rm-beef':   { opening: 5500, in: 12000, out: 400, actualCount: 8750, remarks: '' },
+            'rm-butter': { opening: 2000, in: 3000, out: 40, actualCount: 3350, remarks: '' },
+            'rm-cola':   { opening: 25, in: 60, out: 0, actualCount: 30, remarks: '' },
+            'rm-fries':  { opening: 7000, in: 12000, out: 150, actualCount: 12250, remarks: '' }
+          }
+        }
+      },
+
+      // ข้อมูลสรุปรายเดือนในอดีต (Monthly Historical Aggregates)
+      monthlyHistory: {
+        '2026-10': {
+          label: 'ตุลาคม 2026 (Month-to-Date: 1 - 11 ต.ค.)',
+          daysCount: 11,
+          totalDishes: 1240,
+          stocks: {
+            'rm-salmon': { opening: 3800, in: 115000, out: 3800, bom: 98000, actualCount: 6400 },
+            'rm-beef':   { opening: 6500, in: 160000, out: 6200, bom: 142000, actualCount: 9800 },
+            'rm-butter': { opening: 2200, in: 32000, out: 650, bom: 28000, actualCount: 5200 },
+            'rm-cola':   { opening: 35, in: 950, out: 0, bom: 932, actualCount: 53 },
+            'rm-fries':  { opening: 7500, in: 145000, out: 2800, bom: 126000, actualCount: 22800 }
+          }
+        },
+        '2026-09': {
+          label: 'กันยายน 2026 (สรุปเต็มเดือน: 30 วัน)',
+          daysCount: 30,
+          totalDishes: 3850,
+          stocks: {
+            'rm-salmon': { opening: 4000, in: 320000, out: 12000, bom: 280000, actualCount: 30500 },
+            'rm-beef':   { opening: 7000, in: 450000, out: 18000, bom: 390000, actualCount: 46200 },
+            'rm-butter': { opening: 2500, in: 85000, out: 1500, bom: 75000, actualCount: 10600 },
+            'rm-cola':   { opening: 50, in: 2500, out: 0, bom: 2420, actualCount: 130 },
+            'rm-fries':  { opening: 8000, in: 380000, out: 6000, bom: 340000, actualCount: 39800 }
+          }
+        },
+        '2026-08': {
+          label: 'สิงหาคม 2026 (สรุปเต็มเดือน: 31 วัน)',
+          daysCount: 31,
+          totalDishes: 4120,
+          stocks: {
+            'rm-salmon': { opening: 3500, in: 340000, out: 11000, bom: 298000, actualCount: 32000 },
+            'rm-beef':   { opening: 6800, in: 470000, out: 17500, bom: 410000, actualCount: 47500 },
+            'rm-butter': { opening: 2300, in: 90000, out: 1600, bom: 80000, actualCount: 10200 },
+            'rm-cola':   { opening: 45, in: 2650, out: 0, bom: 2560, actualCount: 135 },
+            'rm-fries':  { opening: 7800, in: 395000, out: 6200, bom: 355000, actualCount: 40100 }
+          }
+        }
+      }
+    };
+
+    // Each branch owns its saved history; drafts are isolated by branch and date.
+    appState.branchData = {
+      'BR-001': { dailyHistory: appState.dailyHistory, monthlyHistory: appState.monthlyHistory },
+      'BR-002': { dailyHistory: {}, monthlyHistory: {} }
+    };
+    delete appState.dailyStock;
+    delete appState.dailySales;
+    delete appState.countInputs;
+
+    function getCountDraft() {
+      const key = appState.countBranch + ':' + appState.countDate;
+      if (!appState.countDrafts[key]) {
+        const record = appState.branchData[appState.countBranch].dailyHistory[appState.countDate];
+        const inputs = {};
+        appState.materials.forEach(mat => {
+          const stock = record?.stocks[mat.id];
+          const total = stock?.actualCount || 0;
+          const main = Math.floor(total / mat.mainFactor);
+          inputs[mat.id] = { main, sub: (total - main * mat.mainFactor) / mat.subFactor, remarks: stock?.remarks || '' };
+        });
+        appState.countDrafts[key] = inputs;
+      }
+      return appState.countDrafts[key];
+    }
+
+    function handleCountScopeChange() {
+      appState.countBranch = document.getElementById('stockCountBranchInput').value;
+      appState.countDate = document.getElementById('stockCountDateInput').value;
+      renderStockCountTable();
+    }
+
+    // 2. TAB SWITCHING FUNCTION
+    function switchTab(tabId) {
+      if(['tab-stock-overview','tab-restore'].includes(tabId) && (typeof bomCloud==='undefined'||bomCloud.member?.role!=='admin'))return;
+      document.querySelectorAll('.tab-content').forEach(el => el.classList.add('hidden'));
+      document.querySelectorAll('.tab-btn').forEach(btn => {
+        btn.classList.remove('active', 'text-emerald-700', 'bg-emerald-50', 'border', 'border-emerald-200');
+        btn.classList.add('text-[var(--muted-foreground,#64748b)]');
+      });
+
+      const target = document.getElementById(tabId);
+      if (target) target.classList.remove('hidden');
+
+      const activeBtn = document.getElementById('nav-' + tabId);
+      if (activeBtn) {
+        activeBtn.classList.add('active', 'text-emerald-700', 'bg-emerald-50', 'border', 'border-emerald-200');
+        activeBtn.classList.remove('text-[var(--muted-foreground,#64748b)]');
+      }
+
+      if (tabId === 'tab-bom') renderBomModule();
+      if (tabId === 'tab-count') renderStockCountTable();
+      if (tabId === 'tab-variance') renderVarianceDashboard();
+      if (tabId === 'tab-branch-check') openBranchCheck();
+      if (tabId === 'tab-stock-overview') openStockOverview();
+    }
+
+    // 3. MODULE 1: BOM LOGIC & RENDERING
+    function renderBomModule() {
+      const container = document.getElementById('menuCardsContainer');
+      const query=document.getElementById('menuSearch')?.value||'';
+      const previousScroll=container.dataset.search===query?container.scrollTop:0;
+      container.dataset.search=query;
+      container.innerHTML = '';
+
+      appState.recipes.filter(recipe => (recipe.menuCode + ' ' + recipe.menuName).toLowerCase().includes((document.getElementById('menuSearch')?.value || '').toLowerCase())).forEach(recipe => {
+        const isSelected = recipe.menuId === appState.selectedMenuId;
+        const card = document.createElement('div');
+        card.title=recipe.menuName;
+        card.className = `p-3.5 rounded-xl border cursor-pointer transition-all ${
+          isSelected 
+            ? 'bg-emerald-50/70 border-emerald-300 shadow-xs' 
+            : 'bg-white border-slate-200 hover:border-slate-300'
+        }`;
+        card.onclick = () => {
+          appState.selectedMenuId = recipe.menuId;
+          renderBomModule();
+        };
+
+        card.innerHTML = `
+          <div class="flex items-center justify-between">
+            <span class="text-xs font-bold text-slate-800">${recipe.menuName}</span>
+          </div>
+          <div class="text-xs text-slate-400 mt-1 flex items-center justify-between">
+            <span>${recipe.menuCode}</span>
+            <span>${recipe.items.length} วัตถุดิบ</span>
+          </div>
+        `;
+        container.appendChild(card);
+      });
+
+      container.scrollTop=previousScroll;
+      // Render Selected Recipe Details
+      const selected = appState.recipes.find(r => r.menuId === appState.selectedMenuId) || appState.recipes[0];
+      document.getElementById('currentRecipeName').textContent = selected.menuName;
+      document.getElementById('currentRecipeCode').textContent = selected.menuCode;
+
+
+      const tbody = document.getElementById('recipeItemsTableBody');
+      tbody.innerHTML = '';
+
+      // Update Form Target Name Display
+      const formMenuNameEl = document.getElementById('addFormMenuNameDisplay');
+      if (formMenuNameEl) formMenuNameEl.textContent = selected.menuName;
+
+      selected.items.forEach(item => {
+        const mat = appState.materials.find(m => m.id === item.materialId);
+        if (!mat) return;
+
+        const grossQty = item.netQty / (item.yieldRate / 100);
+
+
+        const tr = document.createElement('tr');
+        tr.className = 'hover:bg-slate-50 transition-colors';
+        tr.innerHTML = `
+          <td class="p-3">
+            <div class="font-bold text-slate-800">${mat.name}</div>
+            <div class="text-slate-400 font-mono">${mat.code} (${mat.baseUnit})</div>
+          </td>
+          <td class="p-3 text-right font-medium">${item.netQty.toLocaleString()} ${item.unitReview || mat.baseUnit}${item.unitReview ? " (ต้องตรวจหน่วยใหม่)" : ""}</td>
+          <td class="p-3 text-center">
+            <span class="px-2 py-0.5 rounded-md font-bold ${item.yieldRate < 100 ? 'bg-amber-100 text-amber-800' : 'bg-slate-100 text-slate-700'}">
+              ${item.yieldRate}%
+            </span>
+          </td>
+          <td class="p-3 text-right font-bold text-slate-900">${grossQty.toFixed(1)} ${mat.baseUnit}</td>
+          <td class="p-3 text-center">
+            <button type="button" onclick="deleteIngredientFromRecipe('${item.materialId}')" title="ลบออกจากสูตร" class="text-rose-500 hover:text-rose-700 hover:bg-rose-50 p-1 rounded-lg transition-colors text-xs font-bold cursor-pointer">
+              🗑️ ลบ
+            </button>
+          </td>
+        `;
+        tbody.appendChild(tr);
+      });
+
+      // Populate Ingredient Select Dropdown
+      const selectEl = document.getElementById('ingredientSelectInput');
+      if (selectEl) {
+        const currentSelectedVal = selectEl.value;
+        selectEl.innerHTML = '';
+        appState.materials.forEach(mat => {
+          const opt = document.createElement('option');
+          opt.value = mat.id;
+          opt.textContent = `${mat.name} (${mat.code}) — หน่วย ${mat.baseUnit}`;
+          selectEl.appendChild(opt);
+        });
+
+        if (currentSelectedVal && appState.materials.some(m => m.id === currentSelectedVal)) {
+          selectEl.value = currentSelectedVal;
+        } else if (appState.materials.length > 0) {
+          selectEl.value = appState.materials[0].id;
+        }
+        handleIngredientSelectChange(selectEl.value);
+      }
+    }
+
+    // เมื่อเปลี่ยนเลือกวัตถุดิบในฟอร์มเพิ่มรายการ
+    function handleIngredientSelectChange(materialId) {
+      const mat = appState.materials.find(m => m.id === materialId);
+      if (!mat) return;
+      const unitBadge = document.getElementById('ingredientUnitBadge');
+      if (unitBadge) unitBadge.textContent = `${mat.baseUnit}`;
+      updateAddEstimate();
+    }
+
+    // คำนวณ Gross และต้นทุนประมาณการขณะกรอกตัวเลข
+    function updateAddEstimate() {
+      const matId = document.getElementById('ingredientSelectInput')?.value;
+      const mat = appState.materials.find(m => m.id === matId);
+      if (!mat) return;
+
+      const qty = parseFloat(document.getElementById('ingredientQtyInput')?.value) || 0;
+      const yieldRate = parseFloat(document.getElementById('ingredientYieldInput')?.value) || 100;
+
+      const grossQty = yieldRate > 0 ? qty / (yieldRate / 100) : qty;
+
+
+      const grossEl = document.getElementById('addEstimateGross');
+
+
+
+      if (grossEl) grossEl.textContent = `${grossQty.toFixed(1)} ${mat.baseUnit}`;
+    }
+
+    // บันทึกเพิ่มวัตถุดิบเข้าสู่สูตรของเมนูนี้
+    function addIngredientToCurrentRecipe() {
+      const recipe = appState.recipes.find(r => r.menuId === appState.selectedMenuId);
+      if (!recipe) return;
+
+      const matId = document.getElementById('ingredientSelectInput')?.value;
+      const qty = parseFloat(document.getElementById('ingredientQtyInput')?.value);
+      const yieldRate = parseFloat(document.getElementById('ingredientYieldInput')?.value) || 100;
+
+      if (!matId) {
+        alert('กรุณาเลือกวัตถุดิบ');
+        return;
+      }
+      if (!qty || qty <= 0) {
+        alert('กรุณากรอกจำนวนปริมาณสุทธิที่ต้องการใช้ (ต้องมากกว่า 0)');
+        document.getElementById('ingredientQtyInput')?.focus();
+        return;
+      }
+
+      const mat = appState.materials.find(m => m.id === matId);
+
+      // ตรวจสอบว่ามีวัตถุดิบนี้ในสูตรอยู่แล้วหรือไม่
+      const existingIdx = recipe.items.findIndex(it => it.materialId === matId);
+      if (existingIdx >= 0) {
+        const confirmUpdate = confirm(`วัตถุดิบ "${mat.name}" มีอยู่ในสูตรนี้แล้ว ต้องการอัปเดตปริมาณเป็น ${qty} ${mat.baseUnit} (Yield ${yieldRate}%) หรือไม่?`);
+        if (confirmUpdate) {
+          recipe.items[existingIdx].netQty = qty;
+          recipe.items[existingIdx].yieldRate = yieldRate;
+          delete recipe.items[existingIdx].unitReview;
+        } else {
+          return;
+        }
+      } else {
+        recipe.items.push({
+          materialId: matId,
+          netQty: qty,
+          yieldRate: yieldRate
+        });
+      }
+
+      // รีเซ็ตช่องกรอกปริมาณ
+      document.getElementById('ingredientQtyInput').value = '';
+      updateAddEstimate();
+
+      // เรนเดอร์อัปเดตตารางและต้นทุนใหม่ทันที
+      renderBomModule();
+      alert(`เพิ่ม "${mat.name}" จำนวน ${qty} ${mat.baseUnit} ลงในสูตรเมนู "${recipe.menuName}" เรียบร้อยแล้ว! ปริมาณใช้ตามสูตรอัปเดตแล้ว`);
+    }
+
+    // ลบวัตถุดิบออกจากสูตร
+    function deleteIngredientFromRecipe(materialId) {
+      const recipe = appState.recipes.find(r => r.menuId === appState.selectedMenuId);
+      if (!recipe) return;
+
+      const mat = appState.materials.find(m => m.id === materialId);
+      const confirmDelete = confirm(`คุณต้องการลบวัตถุดิบ "${mat?.name || materialId}" ออกจากสูตรของเมนูนี้ใช่หรือไม่?`);
+      if (!confirmDelete) return;
+
+      recipe.items = recipe.items.filter(it => it.materialId !== materialId);
+      renderBomModule();
+    }
+
+    // 4. MODULE 2: EXCEL IMPORT SIMULATION & VALIDATION
+    let currentPreviewData = [];
+    let currentValidationErrors = [];
+
+    function handleImportTypeChange(type) {
+      currentPreviewData = [];
+      currentValidationErrors = [];
+      document.getElementById('validationErrorsBox').classList.add('hidden');
+      document.getElementById('commitImportBtn').disabled = true;
+      document.getElementById('importStatusBadge').textContent = 'รอข้อมูล';
+      document.getElementById('importStatusBadge').className = 'text-xs px-2.5 py-0.5 rounded-full font-semibold bg-slate-100 text-slate-600';
+      document.getElementById('importSummaryText').textContent = 'กรุณาเลือกไฟล์เพื่อดูผลการตรวจสอบ';
+      document.getElementById('previewTableBody').innerHTML = '<tr><td colspan="6" class="p-8 text-center text-slate-400">ยังไม่มีข้อมูล กดปุ่มจำลองข้อมูลด้านซ้ายเพื่อทดสอบ</td></tr>';
+    }
+
+    function loadSampleImportData(isValid) {
+      const type = document.getElementById('importTypeSelect').value;
+      const head = document.getElementById('previewTableHead');
+      const errorsBox = document.getElementById('validationErrorsBox');
+      const errorsList = document.getElementById('validationErrorsList');
+      errorsList.innerHTML = '';
+      currentValidationErrors = [];
+
+      if (type === 'SALES') {
+        head.innerHTML = `
+          <tr>
+            <th class="p-2.5">แถวที่</th>
+            <th class="p-2.5">รหัสสาขา</th>
+            <th class="p-2.5">วันที่ขาย</th>
+            <th class="p-2.5">รหัสเมนู POS</th>
+            <th class="p-2.5 text-right">จำนวนที่ขาย</th>
+            <th class="p-2.5 text-right">ราคาต่อหน่วย</th>
+            <th class="p-2.5 text-center">สถานะแถว</th>
+          </tr>
+        `;
+
+        if (isValid) {
+          currentPreviewData = [
+            { row: 2, branch: 'BR-001', date: '2026-10-11', menu: 'MN-SALMON-01', qty: 50, price: 350.00, error: null },
+            { row: 3, branch: 'BR-001', date: '2026-10-11', menu: 'MN-RIBEYE-01', qty: 40, price: 590.00, error: null },
+            { row: 4, branch: 'BR-001', date: '2026-10-11', menu: 'MN-COLA-CAN', qty: 115, price: 45.00, error: null }
+          ];
+        } else {
+          currentPreviewData = [
+            { row: 2, branch: 'BR-001', date: '2026-10-11', menu: 'MN-SALMON-01', qty: 50, price: 350.00, error: null },
+            { row: 3, branch: '', date: '2026-10-11', menu: 'MN-RIBEYE-01', qty: -5, price: 590.00, error: 'รหัสสาขาว่าง และจำนวนติดลบ (-5)' },
+            { row: 4, branch: 'BR-001', date: '11/10/2026', menu: 'INVALID-CODE-99', qty: 10, price: 0.00, error: 'ไม่พบรหัสเมนูในระบบ' }
+          ];
+          currentValidationErrors = [
+            'แถวที่ 3 คอลัมน์ [รหัสสาขา]: ต้องไม่เป็นค่าว่าง',
+            'แถวที่ 3 คอลัมน์ [จำนวนที่ขาย]: จำนวนต้องมากกว่า 0 (พบค่า -5)',
+            'แถวที่ 4 คอลัมน์ [รหัสเมนู POS]: รหัสเมนู INVALID-CODE-99 ไม่พบในฐานข้อมูล Master Data'
+          ];
+        }
+      } else {
+        // STOCK IN / OUT SAMPLE
+        head.innerHTML = `
+          <tr>
+            <th class="p-2.5">แถวที่</th>
+            <th class="p-2.5">รหัสสาขา</th>
+            <th class="p-2.5">วันที่</th>
+            <th class="p-2.5">รหัสวัตถุดิบ</th>
+            <th class="p-2.5 text-right">จำนวน</th>
+            <th class="p-2.5">หน่วยนับ</th>
+            <th class="p-2.5 text-center">สถานะแถว</th>
+          </tr>
+        `;
+        currentPreviewData = [
+          { row: 2, branch: 'BR-001', date: '2026-10-11', menu: 'RM-SALMON-RAW', qty: 15, unit: 'kg', error: null },
+          { row: 3, branch: 'BR-001', date: '2026-10-11', menu: 'RM-COLA-CAN', qty: 5, unit: 'ลัง', error: null }
+        ];
+      }
+
+      // Render Rows
+      const tbody = document.getElementById('previewTableBody');
+      tbody.innerHTML = '';
+      currentPreviewData.forEach(item => {
+        const tr = document.createElement('tr');
+        tr.className = item.error ? 'bg-rose-50/70' : 'hover:bg-slate-50';
+        tr.innerHTML = `
+          <td class="p-2.5 font-mono text-slate-500">${item.row}</td>
+          <td class="p-2.5 font-bold ${!item.branch ? 'text-rose-600 underline' : 'text-slate-800'}">${item.branch || '(ว่าง)'}</td>
+          <td class="p-2.5">${item.date}</td>
+          <td class="p-2.5 font-mono ${item.error && item.error.includes('รหัส') ? 'text-rose-600 font-bold' : ''}">${item.menu}</td>
+          <td class="p-2.5 text-right font-bold ${item.qty <= 0 ? 'text-rose-600 font-bold' : ''}">${item.qty}</td>
+          <td class="p-2.5 text-right text-slate-600">${item.price ? '฿' + item.price.toFixed(2) : (item.unit || '')}</td>
+          <td class="p-2.5 text-center">
+            ${item.error 
+              ? `<span class="px-2 py-0.5 rounded-full text-xs font-semibold bg-rose-100 text-rose-800">❌ ผิดพลาด</span>` 
+              : `<span class="px-2 py-0.5 rounded-full text-xs font-semibold bg-emerald-100 text-emerald-800">✓ ผ่าน</span>`
+            }
+          </td>
+        `;
+        tbody.appendChild(tr);
+      });
+
+      // Update Badges & Errors
+      const badge = document.getElementById('importStatusBadge');
+      const commitBtn = document.getElementById('commitImportBtn');
+      const summaryText = document.getElementById('importSummaryText');
+
+      if (currentValidationErrors.length > 0) {
+        errorsBox.classList.remove('hidden');
+        currentValidationErrors.forEach(err => {
+          const li = document.createElement('li');
+          li.textContent = err;
+          errorsList.appendChild(li);
+        });
+        badge.textContent = `พบ ${currentValidationErrors.length} ข้อผิดพลาด`;
+        badge.className = 'text-xs px-2.5 py-0.5 rounded-full font-semibold bg-rose-100 text-rose-700';
+        commitBtn.disabled = true;
+        summaryText.textContent = `ตรวจสอบพบข้อมูลผิดพลาด ${currentValidationErrors.length} รายการ กรุณาแก้ไขก่อนบันทึก`;
+      } else {
+        errorsBox.classList.add('hidden');
+        badge.textContent = 'ข้อมูลถูกต้อง 100%';
+        badge.className = 'text-xs px-2.5 py-0.5 rounded-full font-semibold bg-emerald-100 text-emerald-700';
+        commitBtn.disabled = false;
+        summaryText.textContent = `ตรวจสอบผ่านเรียบร้อยทั้งหมด ${currentPreviewData.length} แถว พร้อมบันทึกเข้าสู่ระบบ`;
+      }
+    }
+
+    function commitImportData() {
+      alert(`นำเข้าข้อมูลเรียบร้อยแล้ว (${currentPreviewData.length} แถว) ข้อมูลถูกประมวลผลเข้าสู่คลังสินค้าเรียบร้อย`);
+      switchTab('tab-variance');
+    }
+
+    function downloadSampleTemplate() {
+      alert('เริ่มดาวน์โหลดไฟล์ Template Excel สำหรับระบบ BOM & Inventory เรียบร้อย');
+    }
+
+    // 5. MODULE 3: DAILY PHYSICAL STOCK COUNT
+    function renderStockCountTable() {
+      const tbody = document.getElementById('stockCountTableBody');
+      tbody.innerHTML = '';
+
+      appState.materials.forEach(mat => {
+        const inputState = getCountDraft()[mat.id] || { main: 0, sub: 0, remarks: '' };
+        const totalBase = (inputState.main * mat.mainFactor) + (inputState.sub * mat.subFactor);
+
+        const tr = document.createElement('tr');
+        tr.className = 'hover:bg-slate-50 transition-colors';
+        tr.innerHTML = `
+          <td class="p-3.5">
+            <div class="font-bold text-slate-900">${mat.name}</div>
+            <div class="text-xs text-slate-400 font-mono mt-0.5">${mat.code}</div>
+          </td>
+          <td class="p-3.5">
+            <span class="bg-slate-100 text-slate-700 px-2.5 py-1 rounded-md font-medium text-xs">
+              ${mat.category}
+            </span>
+          </td>
+          <td class="p-3.5">
+            <div class="space-y-1">
+              <label class="text-xs text-slate-400">${mat.mainUnit}</label>
+              <input type="number" min="0" step="any" value="${inputState.main}" 
+                oninput="handleCountInputChange('${mat.id}', 'main', this.value)"
+                class="w-full bg-white border border-slate-300 rounded-lg p-2 text-right font-bold text-slate-800 text-xs focus:ring-2 focus:ring-emerald-500 outline-none">
+            </div>
+          </td>
+          <td class="p-3.5">
+            <div class="space-y-1">
+              <label class="text-xs text-slate-400">${mat.subUnit}</label>
+              <input type="number" min="0" step="any" value="${inputState.sub}" 
+                oninput="handleCountInputChange('${mat.id}', 'sub', this.value)"
+                class="w-full bg-white border border-slate-300 rounded-lg p-2 text-right font-bold text-slate-800 text-xs focus:ring-2 focus:ring-emerald-500 outline-none">
+            </div>
+          </td>
+          <td class="p-3.5 text-right bg-emerald-50/40">
+            <div id="base-total-${mat.id}" class="text-sm font-bold text-emerald-800">
+              ${totalBase.toLocaleString()}
+            </div>
+            <div class="text-xs text-slate-400 font-medium">หน่วยฐาน: ${mat.baseUnit}</div>
+          </td>
+          <td class="p-3.5">
+            <input type="text" value="${inputState.remarks || ''}" 
+              placeholder="ระบุเหตุผล..." 
+              onchange="handleCountInputChange('${mat.id}', 'remarks', this.value)"
+              class="w-full bg-white border border-slate-200 rounded-lg p-2 text-xs text-slate-700 outline-none focus:ring-1 focus:ring-emerald-500">
+          </td>
+        `;
+        tbody.appendChild(tr);
+      });
+    }
+
+    function handleCountInputChange(matId, field, val) {
+      const inputs = getCountDraft();
+      if (!inputs[matId]) inputs[matId] = { main: 0, sub: 0, remarks: '' };
+      inputs[matId][field] = field === 'remarks' ? val : Math.max(0, Number(val) || 0);
+      const mat = appState.materials.find(m => m.id === matId);
+      const total = inputs[matId].main * mat.mainFactor + inputs[matId].sub * mat.subFactor;
+      const display = document.getElementById('base-total-' + matId);
+      if (display) display.textContent = total.toLocaleString();
+    }
+
+    function savePhysicalStockCount() {
+      const branch = appState.countBranch;
+      const date = appState.countDate;
+      if (!date) { alert('กรุณาเลือกวันที่ตรวจนับ'); return; }
+      const data = appState.branchData[branch];
+      const record = data.dailyHistory[date] || { sales: [], stocks: {} };
+      const inputs = getCountDraft();
+      appState.materials.forEach(mat => {
+        const input = inputs[mat.id] || { main: 0, sub: 0, remarks: '' };
+        record.stocks[mat.id] = {
+          ...(record.stocks[mat.id] || { opening: 0, in: 0, out: 0 }),
+          actualCount: input.main * mat.mainFactor + input.sub * mat.subFactor,
+          remarks: input.remarks
+        };
+      });
+      data.dailyHistory[date] = record;
+      const month = date.slice(0, 7);
+      const dates = Object.keys(data.dailyHistory).filter(d => d.startsWith(month)).sort();
+      if (data.monthlyHistory[month] && date === dates[dates.length - 1]) {
+        appState.materials.forEach(mat => {
+          const stock = data.monthlyHistory[month].stocks[mat.id] || { opening: 0, in: 0, out: 0, bom: 0 };
+          stock.actualCount = record.stocks[mat.id].actualCount;
+          data.monthlyHistory[month].stocks[mat.id] = stock;
+        });
+      }
+      document.getElementById('varianceBranchInput').value = branch;
+      document.getElementById('varianceDailyInput').value = date;
+      appState.varianceFilter.branch = branch;
+      appState.varianceFilter.dailyDate = date;
+      setVariancePeriodMode('daily');
+      switchTab('tab-variance');
+      alert('บันทึกยอดตรวจนับของ ' + branch + ' วันที่ ' + date + ' แล้ว (ข้อมูลอยู่ในหน้านี้จนกว่าจะรีเฟรช)');
+    }
+
+    // 6. MODULE 4: MULTI-PERIOD VARIANCE ENGINE (รายวัน, รายเดือน, กำหนดช่วงวัน)
+    function setVariancePeriodMode(mode) {
+      appState.varianceFilter.periodMode = mode;
+
+      // Update button styles
+      ['daily', 'monthly', 'custom'].forEach(m => {
+        const btn = document.getElementById(`btn-period-${m}`);
+        if (!btn) return;
+        if (m === mode) {
+          btn.className = 'period-btn px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all bg-emerald-600 text-white shadow-xs';
+        } else {
+          btn.className = 'period-btn px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all bg-slate-100 text-slate-700 hover:bg-slate-200';
+        }
+      });
+
+      // Toggle input panels
+      document.getElementById('filterInputDaily').classList.toggle('hidden', mode !== 'daily');
+      document.getElementById('filterInputMonthly').classList.toggle('hidden', mode !== 'monthly');
+      document.getElementById('filterInputCustom').classList.toggle('hidden', mode !== 'custom');
+
+      renderVarianceDashboard();
+    }
+
+    function setVarianceViewType(viewType) {
+      appState.varianceFilter.viewType = viewType;
+
+      const btnSummary = document.getElementById('btn-view-summary');
+      const btnTrend = document.getElementById('btn-view-trend');
+      const summaryView = document.getElementById('varianceSummaryTableView');
+      const trendView = document.getElementById('varianceTrendTableView');
+
+      if (viewType === 'summary') {
+        btnSummary.className = 'px-3 py-1.5 rounded-lg font-bold bg-white text-slate-800 shadow-xs transition-all';
+        btnTrend.className = 'px-3 py-1.5 rounded-lg font-bold text-slate-600 hover:text-slate-900 transition-all';
+        summaryView.classList.remove('hidden');
+        trendView.classList.add('hidden');
+      } else {
+        btnTrend.className = 'px-3 py-1.5 rounded-lg font-bold bg-white text-slate-800 shadow-xs transition-all';
+        btnSummary.className = 'px-3 py-1.5 rounded-lg font-bold text-slate-600 hover:text-slate-900 transition-all';
+        summaryView.classList.add('hidden');
+        trendView.classList.remove('hidden');
+      }
+
+      renderVarianceDashboard();
+    }
+
+    function quickSetDaily(dateStr) {
+      document.getElementById('varianceDailyInput').value = dateStr;
+      appState.varianceFilter.dailyDate = dateStr;
+      renderVarianceDashboard();
+    }
+
+    function quickSetRange(type) {
+      if (type === '7days') {
+        document.getElementById('varianceStartDateInput').value = relativeLocalDate(-6);
+        document.getElementById('varianceEndDateInput').value = localDateString();
+      } else if (type === 'mtd') {
+        document.getElementById('varianceStartDateInput').value = localDateString().slice(0,7)+'-01';
+        document.getElementById('varianceEndDateInput').value = localDateString();
+      }
+      handleVarianceFilterChange();
+    }
+
+    function handleVarianceFilterChange() {
+      appState.varianceFilter.dailyDate = document.getElementById('varianceDailyInput').value;
+      appState.varianceFilter.monthlyMonth = document.getElementById('varianceMonthInput').value;
+      appState.varianceFilter.startDate = document.getElementById('varianceStartDateInput').value;
+      appState.varianceFilter.endDate = document.getElementById('varianceEndDateInput').value;
+      appState.varianceFilter.branch = document.getElementById('varianceBranchInput').value;
+      renderVarianceDashboard();
+    }
+
+    // คำนวณยอดใช้วัตถุดิบตามสูตรจากชุดยอดขาย
+    function computeBomDeductionFromSales(salesList) {
+      const deductions = {};
+      appState.materials.forEach(m => deductions[m.id] = 0);
+
+      salesList.forEach(sale => {
+        const recipe = appState.recipes.find(r => r.menuId === sale.menuId);
+        if (!recipe) return;
+
+        recipe.items.forEach(item => {
+          const grossQty = item.netQty / (item.yieldRate / 100);
+          const totalUsed = sale.qtySold * grossQty;
+          deductions[item.materialId] = (deductions[item.materialId] || 0) + totalUsed;
+        });
+      });
+
+      return deductions;
+    }
+
+    // MAIN RENDER FUNCTION FOR VARIANCE DASHBOARD
+    function renderVarianceDashboard() {
+      const filter = appState.varianceFilter;
+      const branchName = filter.branch === 'BR-001' 
+        ? 'สาขา สยามพารากอน' 
+        : filter.branch === 'BR-002' 
+          ? 'สาขา เซ็นทรัลเวิลด์' 
+          : 'ทุกสาขารวมกัน (All Branches)';
+      document.getElementById('activeBranchLabel').textContent = branchName;
+
+      let periodLabel = '';
+      let calculatedRows = [];
+      let dailyBreakdownRows = [];
+      const branches = filter.branch === 'ALL' ? Object.keys(appState.branchData) : [filter.branch];
+      branches.forEach(branch => {
+      const { dailyHistory, monthlyHistory } = appState.branchData[branch];
+
+      // -------------------------------------------------------------
+      // CASE 1: รายวัน (DAILY MODE)
+      // -------------------------------------------------------------
+      if (filter.periodMode === 'daily') {
+        const targetDate = filter.dailyDate || '2026-10-11';
+        periodLabel = `รายวัน: ${targetDate}`;
+
+        const dayRecord = dailyHistory[targetDate];
+        if (!dayRecord) return;
+        const bomUsage = computeBomDeductionFromSales(dayRecord.sales);
+
+        appState.materials.forEach(mat => {
+          const stock = dayRecord.stocks[mat.id] || { opening: 0, in: 0, out: 0, actualCount: 0 };
+          const used = bomUsage[mat.id] || 0;
+          const theoryEnding = stock.opening + stock.in - stock.out - used;
+          const actual = stock.actualCount;
+          const diffQty = actual - theoryEnding;
+          const diffCost = diffQty * mat.costPerBase;
+          const diffPct = used > 0 ? (diffQty / used) * 100 : 0;
+
+          calculatedRows.push({
+            mat,
+            opening: stock.opening,
+            inQty: stock.in,
+            outQty: stock.out,
+            bomQty: used,
+            theoryEnding,
+            actualCount: actual,
+            varianceQty: diffQty,
+            varianceCost: diffCost,
+            variancePct: diffPct,
+            date: targetDate
+          });
+        });
+
+        // For breakdown view in daily mode, also collect surrounding days for context
+        Object.keys(dailyHistory).sort().reverse().forEach(d => {
+          const rec = dailyHistory[d];
+          const bUsage = computeBomDeductionFromSales(rec.sales);
+          appState.materials.forEach(mat => {
+            const s = rec.stocks[mat.id] || { opening: 0, in: 0, out: 0, actualCount: 0 };
+            const u = bUsage[mat.id] || 0;
+            const th = s.opening + s.in - s.out - u;
+            const act = s.actualCount;
+            const vQty = act - th;
+            dailyBreakdownRows.push({
+              date: d,
+              mat,
+              opening: s.opening,
+              inQty: s.in,
+              outQty: s.out,
+              bomQty: u,
+              theoryEnding: th,
+              actualCount: act,
+              varianceQty: vQty,
+              varianceCost: vQty * mat.costPerBase,
+              variancePct: u > 0 ? (vQty / u) * 100 : 0
+            });
+          });
+        });
+      }
+
+      // -------------------------------------------------------------
+      // CASE 2: รายเดือน (MONTHLY MODE)
+      // -------------------------------------------------------------
+      else if (filter.periodMode === 'monthly') {
+        const targetMonth = filter.monthlyMonth || '2026-10';
+        const monthRecord = monthlyHistory[targetMonth] || summarizeMonth(dailyHistory, targetMonth);
+        periodLabel = `รายเดือน: ${targetMonth}`;
+        if (!monthRecord) return;
+
+        appState.materials.forEach(mat => {
+          const s = monthRecord.stocks[mat.id] || { opening: 0, in: 0, out: 0, bom: 0, actualCount: 0 };
+          const theoryEnding = s.opening + s.in - s.out - s.bom;
+          const actual = s.actualCount;
+          const diffQty = actual - theoryEnding;
+          const diffCost = diffQty * mat.costPerBase;
+          const diffPct = s.bom > 0 ? (diffQty / s.bom) * 100 : 0;
+
+          calculatedRows.push({
+            mat,
+            opening: s.opening,
+            inQty: s.in,
+            outQty: s.out,
+            bomQty: s.bom,
+            theoryEnding,
+            actualCount: actual,
+            varianceQty: diffQty,
+            varianceCost: diffCost,
+            variancePct: diffPct,
+            date: targetMonth
+          });
+        });
+
+        // Collect daily breakdown for this month
+        Object.keys(dailyHistory).sort().reverse().forEach(d => {
+          if (d.startsWith(targetMonth)) {
+            const rec = dailyHistory[d];
+            const bUsage = computeBomDeductionFromSales(rec.sales);
+            appState.materials.forEach(mat => {
+              const s = rec.stocks[mat.id] || { opening: 0, in: 0, out: 0, actualCount: 0 };
+              const u = bUsage[mat.id] || 0;
+              const th = s.opening + s.in - s.out - u;
+              const act = s.actualCount;
+              const vQty = act - th;
+              dailyBreakdownRows.push({
+                date: d,
+                mat,
+                opening: s.opening,
+                inQty: s.in,
+                outQty: s.out,
+                bomQty: u,
+                theoryEnding: th,
+                actualCount: act,
+                varianceQty: vQty,
+                varianceCost: vQty * mat.costPerBase,
+                variancePct: u > 0 ? (vQty / u) * 100 : 0
+              });
+            });
+          }
+        });
+      }
+
+      // -------------------------------------------------------------
+      // CASE 3: สรุปช่วงวัน (CUSTOM DATE RANGE)
+      // -------------------------------------------------------------
+      else {
+        const startDate = filter.startDate || '2026-10-01';
+        const endDate = filter.endDate || '2026-10-11';
+        periodLabel = `สรุปช่วงเวลา: ${startDate} ถึง ${endDate}`;
+
+        // Aggregate days falling in range
+        const matchedDates = Object.keys(dailyHistory)
+          .filter(d => d >= startDate && d <= endDate)
+          .sort();
+
+        if (matchedDates.length === 0) return;
+
+        const earliestDate = matchedDates[0];
+        const latestDate = matchedDates[matchedDates.length - 1];
+
+        appState.materials.forEach(mat => {
+          let sumIn = 0;
+          let sumOut = 0;
+          let sumBom = 0;
+
+          matchedDates.forEach(d => {
+            const rec = dailyHistory[d];
+            const s = rec.stocks[mat.id] || { in: 0, out: 0 };
+            sumIn += (s.in || 0);
+            sumOut += (s.out || 0);
+
+            const bUsage = computeBomDeductionFromSales(rec.sales);
+            sumBom += (bUsage[mat.id] || 0);
+
+            // Also push to breakdown
+            const thDay = (s.opening || 0) + (s.in || 0) - (s.out || 0) - (bUsage[mat.id] || 0);
+            const actDay = s.actualCount || 0;
+            const diffDay = actDay - thDay;
+            dailyBreakdownRows.push({
+              date: d,
+              mat,
+              opening: s.opening || 0,
+              inQty: s.in || 0,
+              outQty: s.out || 0,
+              bomQty: bUsage[mat.id] || 0,
+              theoryEnding: thDay,
+              actualCount: actDay,
+              varianceQty: diffDay,
+              varianceCost: diffDay * mat.costPerBase,
+              variancePct: (bUsage[mat.id] || 0) > 0 ? (diffDay / (bUsage[mat.id] || 0)) * 100 : 0
+            });
+          });
+
+          // Multi-day aggregation formulas:
+          // Opening = Opening of earliest date
+          // In = Sum of all In
+          // Out = Sum of all Out
+          // BOM = Sum of all BOM usages
+          // Actual Ending = Actual count on latest date
+          const opening = dailyHistory[earliestDate]?.stocks[mat.id]?.opening || 0;
+          const actualLatest = dailyHistory[latestDate]?.stocks[mat.id]?.actualCount || 0;
+          const theoryEnding = opening + sumIn - sumOut - sumBom;
+          const diffQty = actualLatest - theoryEnding;
+          const diffCost = diffQty * mat.costPerBase;
+          const diffPct = sumBom > 0 ? (diffQty / sumBom) * 100 : 0;
+
+          calculatedRows.push({
+            mat,
+            opening,
+            inQty: sumIn,
+            outQty: sumOut,
+            bomQty: sumBom,
+            theoryEnding,
+            actualCount: actualLatest,
+            varianceQty: diffQty,
+            varianceCost: diffCost,
+            variancePct: diffPct,
+            date: `${startDate} - ${endDate}`
+          });
+        });
+      }
+
+      });
+      function combineRows(rows, byDate) {
+        const combined = new Map();
+        rows.forEach(row => {
+          const key = (byDate ? row.date + ':' : '') + row.mat.id;
+          if (!combined.has(key)) { combined.set(key, { ...row }); return; }
+          const target = combined.get(key);
+          ['opening', 'inQty', 'outQty', 'bomQty', 'theoryEnding', 'actualCount', 'varianceQty', 'varianceCost'].forEach(field => target[field] += row[field]);
+          target.variancePct = target.bomQty > 0 ? target.varianceQty / target.bomQty * 100 : 0;
+        });
+        return [...combined.values()];
+      }
+      calculatedRows = combineRows(calculatedRows, false);
+      dailyBreakdownRows = combineRows(dailyBreakdownRows, true);
+      // Update Active Period Label
+      document.getElementById('activePeriodLabel').textContent = periodLabel;
+
+      // -------------------------------------------------------------
+      // KPI TOTAL CALCULATIONS
+      // -------------------------------------------------------------
+      let totalTheoryCost = 0;
+      let totalVarianceCost = 0;
+      let warningItemsCount = 0;
+
+      calculatedRows.forEach(row => {
+        totalTheoryCost += (row.bomQty * row.mat.costPerBase);
+        totalVarianceCost += row.varianceCost;
+        if (row.variancePct < -5.0) warningItemsCount++;
+      });
+
+      // Update KPI Cards UI
+      document.getElementById('kpiTheoryCost').textContent = `฿${totalTheoryCost.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+      
+      const netVarEl = document.getElementById('kpiNetVarianceCost');
+      const dirText = document.getElementById('kpiVarianceDirectionText');
+      if (totalVarianceCost < 0) {
+        netVarEl.textContent = `-฿${Math.abs(totalVarianceCost).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+        netVarEl.className = 'text-2xl font-bold text-rose-600 mt-2';
+        dirText.innerHTML = '📉 วัตถุดิบสูญหาย / ใช้เกินสเปก';
+        dirText.className = 'text-xs text-rose-500 mt-1 font-medium flex items-center gap-1';
+      } else {
+        netVarEl.textContent = `+฿${totalVarianceCost.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+        netVarEl.className = 'text-2xl font-bold text-emerald-600 mt-2';
+        dirText.innerHTML = '📈 วัตถุดิบเหลือเกินทฤษฎี';
+        dirText.className = 'text-xs text-emerald-600 mt-1 font-medium flex items-center gap-1';
+      }
+
+      const totalVarPct = totalTheoryCost > 0 ? (totalVarianceCost / totalTheoryCost) * 100 : 0;
+      document.getElementById('kpiVariancePct').textContent = `${totalVarPct.toFixed(1)}%`;
+      document.getElementById('kpiWarningItemsCount').textContent = `${warningItemsCount} รายการ`;
+
+      // -------------------------------------------------------------
+      // RENDER TABLE 1: SUMMARY TABLE
+      // -------------------------------------------------------------
+      const tbodySummary = document.getElementById('varianceTableBody');
+      tbodySummary.innerHTML = calculatedRows.length ? '' : '<tr><td colspan="10" class="p-6 text-center text-slate-400">ไม่มีข้อมูลของสาขาและช่วงเวลาที่เลือก</td></tr>';
+
+      calculatedRows.forEach(row => {
+        let statusBadge = '';
+        if (row.varianceQty === 0) {
+          statusBadge = '<span class="px-2 py-0.5 rounded-full text-xs font-semibold bg-emerald-100 text-emerald-800">✓ ตรงตามสูตร</span>';
+        } else if (row.variancePct < -5.0) {
+          statusBadge = `<span class="px-2 py-0.5 rounded-full text-xs font-semibold bg-rose-100 text-rose-800">⚠️ สูญเสียสูง (${row.variancePct.toFixed(1)}%)</span>`;
+        } else if (row.varianceQty < 0) {
+          statusBadge = `<span class="px-2 py-0.5 rounded-full text-xs font-semibold bg-amber-100 text-amber-800">ใช้เกิน (${row.variancePct.toFixed(1)}%)</span>`;
+        } else {
+          statusBadge = `<span class="px-2 py-0.5 rounded-full text-xs font-semibold bg-blue-100 text-blue-800">ใช้น้อยกว่าสูตร (+${row.variancePct.toFixed(1)}%)</span>`;
+        }
+
+        const tr = document.createElement('tr');
+        tr.className = 'hover:bg-slate-50 transition-colors';
+        tr.innerHTML = `
+          <td class="p-3">
+            <div class="font-bold text-slate-900">${row.mat.name}</div>
+            <div class="text-xs text-slate-400 font-mono">${row.mat.code}</div>
+          </td>
+          <td class="p-3 text-right text-slate-600">${row.opening.toLocaleString()} ${row.mat.baseUnit}</td>
+          <td class="p-3 text-right text-emerald-700 font-semibold">+${row.inQty.toLocaleString()}</td>
+          <td class="p-3 text-right text-rose-600">-${row.outQty.toLocaleString()}</td>
+          <td class="p-3 text-right text-indigo-700 font-bold">-${row.bomQty.toFixed(1)}</td>
+          <td class="p-3 text-right bg-slate-100/70 font-semibold text-slate-800">${row.theoryEnding.toFixed(1)}</td>
+          <td class="p-3 text-right bg-emerald-50/70 font-bold text-emerald-900">${row.actualCount.toLocaleString()}</td>
+          <td class="p-3 text-right font-bold ${row.varianceQty < 0 ? 'text-rose-600' : 'text-slate-800'}">
+            ${row.varianceQty > 0 ? '+' : ''}${row.varianceQty.toFixed(1)} ${row.mat.baseUnit}
+          </td>
+          <td class="p-3 text-right font-bold ${row.varianceCost < 0 ? 'text-rose-600' : 'text-slate-800'}">
+            ${row.varianceCost < 0 ? '-฿' + Math.abs(row.varianceCost).toFixed(2) : '฿' + row.varianceCost.toFixed(2)}
+          </td>
+          <td class="p-3 text-center">${statusBadge}</td>
+        `;
+        tbodySummary.appendChild(tr);
+      });
+
+      // -------------------------------------------------------------
+      // RENDER TABLE 2: DAILY BREAKDOWN / TREND TABLE
+      // -------------------------------------------------------------
+      const tbodyBreakdown = document.getElementById('varianceDailyBreakdownTableBody');
+      tbodyBreakdown.innerHTML = '';
+
+      if (dailyBreakdownRows.length === 0) {
+        tbodyBreakdown.innerHTML = '<tr><td colspan="11" class="p-6 text-center text-slate-400">ไม่มีข้อมูลแจกแจงรายวันสำหรับช่วงเวลานี้</td></tr>';
+      } else {
+        dailyBreakdownRows.forEach(row => {
+          let badge = '';
+          if (row.varianceQty === 0) {
+            badge = '<span class="px-2 py-0.5 rounded-full text-xs font-semibold bg-emerald-100 text-emerald-800">ปกติ</span>';
+          } else if (row.variancePct < -5.0) {
+            badge = `<span class="px-2 py-0.5 rounded-full text-xs font-semibold bg-rose-100 text-rose-800 font-bold">⚠️ สูญเสีย (${row.variancePct.toFixed(1)}%)</span>`;
+          } else if (row.varianceQty < 0) {
+            badge = `<span class="px-2 py-0.5 rounded-full text-xs font-semibold bg-amber-100 text-amber-800">${row.variancePct.toFixed(1)}%</span>`;
+          } else {
+            badge = `<span class="px-2 py-0.5 rounded-full text-xs font-semibold bg-blue-100 text-blue-800">+${row.variancePct.toFixed(1)}%</span>`;
+          }
+
+          const tr = document.createElement('tr');
+          tr.className = row.variancePct < -5.0 ? 'bg-rose-50/50 hover:bg-rose-50' : 'hover:bg-slate-50 transition-colors';
+          tr.innerHTML = `
+            <td class="p-3 font-semibold text-slate-700 whitespace-nowrap">${row.date}</td>
+            <td class="p-3">
+              <div class="font-bold text-slate-900">${row.mat.name}</div>
+              <div class="text-xs text-slate-400 font-mono">${row.mat.code}</div>
+            </td>
+            <td class="p-3 text-right text-slate-600">${row.opening.toLocaleString()}</td>
+            <td class="p-3 text-right text-emerald-700">+${row.inQty.toLocaleString()}</td>
+            <td class="p-3 text-right text-rose-600">-${row.outQty.toLocaleString()}</td>
+            <td class="p-3 text-right text-indigo-700">-${row.bomQty.toFixed(1)}</td>
+            <td class="p-3 text-right font-semibold text-slate-700 bg-slate-50">${row.theoryEnding.toFixed(1)}</td>
+            <td class="p-3 text-right font-bold text-slate-900 bg-emerald-50/30">${row.actualCount.toLocaleString()}</td>
+            <td class="p-3 text-right font-bold ${row.varianceQty < 0 ? 'text-rose-600' : 'text-slate-800'}">
+              ${row.varianceQty > 0 ? '+' : ''}${row.varianceQty.toFixed(1)} ${row.mat.baseUnit}
+            </td>
+            <td class="p-3 text-right font-bold ${row.varianceCost < 0 ? 'text-rose-600' : 'text-slate-800'}">
+              ${row.varianceCost < 0 ? '-฿' + Math.abs(row.varianceCost).toFixed(2) : '฿' + row.varianceCost.toFixed(2)}
+            </td>
+            <td class="p-3 text-center">${badge}</td>
+          `;
+          tbodyBreakdown.appendChild(tr);
+        });
+      }
+    }
+
+    function exportVarianceReport() {
+      const mode = appState.varianceFilter.periodMode;
+      const label = document.getElementById('activePeriodLabel').textContent;
+      alert(`ส่งออกข้อมูลเรียบร้อยแล้ว: [${label}] ระบบได้ดาวน์โหลดข้อมูลสรุปผลต่างและแจกแจงรายวันเป็นไฟล์ CSV เรียบร้อย`);
+    }
+
+    // MODAL FUNCTIONS FOR RECIPES & MASTER DATA
+    function showAddRecipeModal() {
+      openAddRecipeModal();
+    }
+
+    function openAddRecipeModal() {
+      document.getElementById('modalAddRecipe').classList.remove('hidden');
+      document.getElementById('newMenuCodeInput').value = `MN-${Date.now().toString().slice(-4)}`;
+      document.getElementById('newMenuNameInput').value = '';
+      document.getElementById('newMenuPriceInput').value = '0';
+    }
+
+    function closeAddRecipeModal() {
+      document.getElementById('modalAddRecipe').classList.add('hidden');
+    }
+
+    function saveNewMenu() {
+      const code = document.getElementById('newMenuCodeInput').value.trim();
+      const name = document.getElementById('newMenuNameInput').value.trim();
+      const price = parseFloat(document.getElementById('newMenuPriceInput').value);
+
+      if (!code || !name) {
+        alert('กรุณากรอกรหัสเมนูและชื่อเมนู');
+        return;
+      }
+      if (isNaN(price) || price < 0) {
+        alert('กรุณากรอกราคาขายที่ถูกต้อง');
+        return;
+      }
+
+      if (appState.recipes.some(r => r.menuCode === code)) { alert('รหัสเมนูนี้มีอยู่แล้ว กรุณาเลือกแก้สูตรเดิม'); return; }
+      const newId = `mn-${Date.now()}`;
+      appState.recipes.push({
+        menuId: newId,
+        menuCode: code,
+        menuName: name,
+        sellingPrice: price,
+        items: []
+      });
+
+      appState.selectedMenuId = newId;
+      closeAddRecipeModal();
+      renderBomModule();
+      alert(`สร้างเมนูใหม่ "${name} (${code})" สำเร็จ! ตอนนี้คุณสามารถเพิ่มรายการวัตถุดิบลงในสูตรได้ทันที`);
+    }
+
+    function openCreateMaterialModal() {
+      const unitList = document.getElementById('newMatUnitOptions');
+      unitList.innerHTML = '';
+      const units = new Set(['g', 'ml', 'ชิ้น', 'กระป๋อง', 'ฟอง', 'ขวด', 'แพ็ค', 'ถุง', 'ชุด', 'กิโลกรัม', 'ลิตร']);
+      appState.materials.forEach(mat => { if (mat.baseUnit) units.add(mat.baseUnit.trim()); });
+      if (typeof workflow !== 'undefined') Object.values(workflow.settings || {}).forEach(setting => {
+        if (setting.unit) units.add(setting.unit.trim());
+      });
+      for (const unit of units) {
+        if (!unit) continue;
+        const option = document.createElement('option');
+        option.value = unit;
+        option.textContent = unit === 'g' ? 'กรัม (g)' : unit === 'ml' ? 'มิลลิลิตร (ml)' : unit;
+        unitList.appendChild(option);
+      }
+      document.getElementById('newMatBaseUnitInput').value = '';
+      document.getElementById('modalCreateMaterial').classList.remove('hidden');
+      document.getElementById('newMatCodeInput').value = `RM-NEW-${Date.now().toString().slice(-3)}`;
+      document.getElementById('newMatNameInput').value = '';
+      document.getElementById('newMatCostInput').value = '0';
+    }
+
+    function closeCreateMaterialModal() {
+      document.getElementById('modalCreateMaterial').classList.add('hidden');
+    }
+
+    function saveNewMaterial() {
+      const code = document.getElementById('newMatCodeInput').value.trim();
+      const name = document.getElementById('newMatNameInput').value.trim();
+      const category = document.getElementById('newMatCatInput').value;
+      const baseUnit = document.getElementById('newMatBaseUnitInput').value.trim();
+      const cost = parseFloat(document.getElementById('newMatCostInput').value);
+
+      if (!code || !name) {
+        alert('กรุณากรอกรหัสวัตถุดิบและชื่อวัตถุดิบ');
+        return;
+      }
+      if (!baseUnit) {
+        alert('กรุณาเลือกหรือพิมพ์หน่วยวัตถุดิบ');
+        return;
+      }
+      if (appState.materials.some(mat => mat.code === code)) {
+        alert('รหัสวัตถุดิบนี้มีอยู่แล้ว กรุณาแก้ไขวัตถุดิบเดิม');
+        return;
+      }
+      if (isNaN(cost) || cost < 0) {
+        alert('กรุณากรอกต้นทุนต่อหน่วยฐาน');
+        return;
+      }
+
+      const newMatId = `rm-${Date.now()}`;
+      const newMaterial = {
+        id: newMatId,
+        code,
+        name,
+        category,
+        baseUnit,
+        mainUnit: baseUnit === 'g' ? 'kg' : baseUnit === 'ml' ? 'L' : baseUnit,
+        mainFactor: baseUnit === 'g' || baseUnit === 'ml' ? 1000 : 1,
+        subUnit: baseUnit,
+        subFactor: 1,
+        costPerBase: cost
+      };
+
+      appState.materials.push(newMaterial);
+      closeCreateMaterialModal();
+      renderBomModule();
+
+      // Auto select newly created material in the ingredient dropdown
+      const selectEl = document.getElementById('ingredientSelectInput');
+      if (selectEl) {
+        selectEl.value = newMatId;
+        handleIngredientSelectChange(newMatId);
+      }
+
+      alert(`บันทึกวัตถุดิบ "${name} (${code})" เข้า Master Data เรียบร้อย! คุณสามารถเลือกใช้ในสูตรเมนูได้ทันที`);
+    }
+
+    function summarizeMonth(history, month) {
+      const dates = Object.keys(history).filter(d => d.startsWith(month)).sort();
+      if (!dates.length) return null;
+      const stocks = {};
+      appState.materials.forEach(mat => {
+        const stock = { opening: history[dates[0]].stocks[mat.id]?.opening || 0, in: 0, out: 0, bom: 0, actualCount: history[dates[dates.length - 1]].stocks[mat.id]?.actualCount || 0 };
+        dates.forEach(date => {
+          stock.in += history[date].stocks[mat.id]?.in || 0;
+          stock.out += history[date].stocks[mat.id]?.out || 0;
+          stock.bom += computeBomDeductionFromSales(history[date].sales)[mat.id] || 0;
+        });
+        stocks[mat.id] = stock;
+      });
+      return { label: month, stocks };
+    }
+
+    // INITIALIZE ON LOAD
+    window.addEventListener('DOMContentLoaded', () => {
+      initializeCurrentDates();
+      renderBomModule();
+    });
+  </script>
+
+  <!-- MODAL 1: เพิ่มเมนู POS และสูตรอาหารใหม่ -->
+  <div id="modalAddRecipe" class="hidden fixed inset-0 z-50 bg-black/50 backdrop-blur-xs flex items-center justify-center p-4">
+    <div class="bg-white rounded-3xl max-w-lg w-full p-6 shadow-2xl border border-slate-200 space-y-4">
+      <div class="flex items-center justify-between border-b border-slate-100 pb-3">
+        <h3 class="text-base font-bold text-slate-800 flex items-center gap-2">
+          <span>🍽️</span> สร้างเมนูขายใหม่ (New POS Menu & BOM)
+        </h3>
+        <button onclick="closeAddRecipeModal()" class="text-slate-400 hover:text-slate-600 text-lg font-bold">✕</button>
+      </div>
+
+      <div class="space-y-3">
+        <div>
+          <label class="block text-xs font-bold text-slate-700 mb-1">รหัสเมนู (POS Code) *</label>
+          <input type="text" id="newMenuCodeInput" placeholder="เช่น MN-PASTA-01" class="w-full border border-slate-300 rounded-xl p-2.5 text-xs font-bold text-slate-800 outline-none focus:ring-2 focus:ring-emerald-500">
+        </div>
+        <div>
+          <label class="block text-xs font-bold text-slate-700 mb-1">ชื่อเมนูอาหาร *</label>
+          <input type="text" id="newMenuNameInput" placeholder="เช่น สปาเก็ตตี้คาโบนาร่าพรีเมียม" class="w-full border border-slate-300 rounded-xl p-2.5 text-xs font-bold text-slate-800 outline-none focus:ring-2 focus:ring-emerald-500">
+        </div>
+        <input type="hidden" id="newMenuPriceInput" value="0">
+      </div>
+
+      <div class="flex items-center justify-end gap-2 pt-3 border-t border-slate-100">
+        <button onclick="closeAddRecipeModal()" class="bg-slate-100 hover:bg-slate-200 text-slate-700 px-4 py-2 rounded-xl text-xs font-semibold">ยกเลิก</button>
+        <button onclick="saveNewMenu()" class="bg-emerald-600 hover:bg-emerald-700 text-white px-5 py-2 rounded-xl text-xs font-bold shadow-xs">บันทึกสร้างเมนู</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL 2: เพิ่มวัตถุดิบใหม่เข้า MASTER DATA -->
+  <div id="modalCreateMaterial" class="hidden fixed inset-0 z-50 bg-black/50 backdrop-blur-xs flex items-center justify-center p-4">
+    <div class="bg-white rounded-3xl max-w-lg w-full p-6 shadow-2xl border border-slate-200 space-y-4">
+      <div class="flex items-center justify-between border-b border-slate-100 pb-3">
+        <h3 class="text-base font-bold text-slate-800 flex items-center gap-2">
+          <span>📦</span> เพิ่มวัตถุดิบใหม่เข้าฐานข้อมูล (Master Data)
+        </h3>
+        <button onclick="closeCreateMaterialModal()" class="text-slate-400 hover:text-slate-600 text-lg font-bold">✕</button>
+      </div>
+
+      <div class="space-y-3">
+        <div>
+          <label class="block text-xs font-bold text-slate-700 mb-1">รหัสวัตถุดิบ (Material Code) *</label>
+          <input type="text" id="newMatCodeInput" placeholder="เช่น RM-CHEESE-PARM" class="w-full border border-slate-300 rounded-xl p-2.5 text-xs font-bold text-slate-800 outline-none focus:ring-2 focus:ring-emerald-500">
+        </div>
+        <div>
+          <label class="block text-xs font-bold text-slate-700 mb-1">ชื่อวัตถุดิบ *</label>
+          <input type="text" id="newMatNameInput" placeholder="เช่น ชีสพาร์เมซาน (Parmesan Cheese)" class="w-full border border-slate-300 rounded-xl p-2.5 text-xs font-bold text-slate-800 outline-none focus:ring-2 focus:ring-emerald-500">
+        </div>
+        <div>
+          <label class="block text-xs font-bold text-slate-700 mb-1">หมวดหมู่วัตถุดิบ</label>
+          <select id="newMatCatInput" class="w-full border border-slate-300 rounded-xl p-2.5 text-xs font-semibold text-slate-800 outline-none">
+            <option value="เนื้อสัตว์และอาหารสด">เนื้อสัตว์และอาหารสด</option>
+            <option value="เนยและผลิตภัณฑ์นม">เนยและผลิตภัณฑ์นม</option>
+            <option value="เครื่องปรุงและซอส">เครื่องปรุงและซอส</option>
+            <option value="ผักและผลไม้">ผักและผลไม้</option>
+            <option value="ของแห้งและแป้ง">ของแห้งและแป้ง</option>
+            <option value="เครื่องดื่ม">เครื่องดื่ม</option>
+          </select>
+        </div>
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <label class="block text-xs font-bold text-slate-700 mb-1">หน่วยฐาน (Base Unit) *</label>
+            <input type="text" id="newMatBaseUnitInput" list="newMatUnitOptions" placeholder="เลือกหรือพิมพ์หน่วย" class="w-full border border-slate-300 rounded-xl p-2.5 text-xs font-bold text-slate-800 outline-none">
+            <datalist id="newMatUnitOptions"></datalist>
+          </div>
+          <input type="hidden" id="newMatCostInput" value="0">
+        </div>
+        <p class="text-xs text-slate-500">เลือกหน่วยที่มีอยู่ หรือพิมพ์ใหม่ เช่น แพ็ค (1000 กรัม) ปริมาณต่อจานจะใช้หน่วยนี้ โดยไม่แปลงขนาดบรรจุจากชื่อหน่วยอัตโนมัติ</p>
+      </div>
+
+      <div class="flex items-center justify-end gap-2 pt-3 border-t border-slate-100">
+        <button onclick="closeCreateMaterialModal()" class="bg-slate-100 hover:bg-slate-200 text-slate-700 px-4 py-2 rounded-xl text-xs font-semibold">ยกเลิก</button>
+        <button onclick="saveNewMaterial()" class="bg-emerald-600 hover:bg-emerald-700 text-white px-5 py-2 rounded-xl text-xs font-bold shadow-xs">บันทึกวัตถุดิบ</button>
+      </div>
+    </div>
+  </div>
+  <div id="modalEditMaterial" role="dialog" aria-modal="true" aria-labelledby="editMaterialTitle" class="hidden fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4">
+    <form onsubmit="event.preventDefault(); saveSelectedMaterial()" class="bg-white rounded-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto p-6 space-y-4">
+      <h3 id="editMaterialTitle" class="font-bold text-lg">แก้ไขวัตถุดิบที่เลือก</h3>
+      <p class="text-xs text-slate-600">ชื่อและรหัสเป็นข้อมูลวัตถุดิบหลัก ส่วนปริมาณต่อจานและ Yield จะเปลี่ยนเฉพาะเมนูที่เลือก</p>
+      <label class="block text-xs font-semibold">รหัสวัตถุดิบ<input id="editMaterialCode" required class="block w-full border rounded-lg p-2 mt-1 read-only:bg-slate-100"></label>
+      <p id="editMaterialCodeHint" class="text-xs text-slate-500"></p>
+      <label class="block text-xs font-semibold">ชื่อวัตถุดิบ<input id="editMaterialName" required class="block w-full border rounded-lg p-2 mt-1"></label>
+      <label class="block text-xs font-semibold">หน่วยฐาน<input id="editMaterialUnit" required class="block w-full border rounded-lg p-2 mt-1 read-only:bg-slate-100"></label>
+      <p id="editMaterialUnitHint" class="text-xs text-slate-500"></p>
+      <p id="editMaterialRecipe" class="text-sm font-semibold text-emerald-700"></p>
+      <label class="block text-xs font-semibold">ปริมาณสุทธิที่ใช้ต่อจาน (ตามหน่วยฐาน)<input id="editMaterialQty" type="number" min="0.000001" step="any" required class="block w-full border rounded-lg p-2 mt-1"></label>
+      <label class="block text-xs font-semibold">Yield (%)<input id="editMaterialYield" type="number" min="0.000001" max="100" step="any" required class="block w-full border rounded-lg p-2 mt-1"></label>
+      <p class="text-xs bg-amber-50 p-3 rounded-lg">ตัวอย่าง: ใช้กุ้งสุทธิ 200 g ต่อจาน ถ้า Yield 80% ระบบจะคำนวณเบิกจริง 250 g ต่อจาน หากไม่มีการสูญเสียให้ใช้ Yield 100%</p>
+      <p id="editMaterialError" role="alert" class="text-xs text-rose-600"></p>
+      <div class="flex justify-end gap-2">
+        <button id="editMaterialCancel" type="button" onclick="closeSelectedMaterialEditor()" class="bg-slate-100 rounded-lg px-4 py-2">ยกเลิก</button>
+        <button id="editMaterialSave" type="submit" class="bg-emerald-600 text-white rounded-lg px-4 py-2 disabled:opacity-50">บันทึกการแก้ไข</button>
+      </div>
+    </form>
+  </div>
+  <script src="vendor/xlsx.full.min.js"></script>
+  <script src="ponn-template.js"></script>
+  <script src="supabase-config.js"></script>
+  <script src="workflow.js"></script>
+  <script src="count-units.js"></script>
+  <script src="supabase-store.js"></script>
+  <script src="data-cleanup.js"></script>
+  <script src="data-restore.js"></script>
+  <script src="branch-check.js"></script>
+  <script src="stock-overview.js"></script>
+</body>
+</html>
+
+
