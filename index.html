@@ -661,6 +661,11 @@
         <details><summary class="cursor-pointer text-sm text-slate-600">ไฟล์ประเภทอื่นไม่มีรหัสสาขา หรือไฟล์ระบุสาขาไม่ครบทุกแถว</summary>
           <label class="block text-sm mt-2"><input id="branchCheckUnscoped" type="checkbox"> ยืนยันว่าไฟล์ที่กำลังเลือกเป็นของสาขาด้านบนเท่านั้น</label>
         </details>
+        <div class="border rounded-xl p-3 space-y-2">
+          <label class="font-semibold">อัปโหลด Excel ไฟล์เดียว รวม 4 ชีต<input type="file" accept=".xlsx,.xls" onchange="loadBranchCheckWorkbook(this)" class="block mt-2"></label>
+          <p class="text-sm text-slate-600">ชื่อชีต: ยอดขาย, itec in, itec out, เครื่องดื่ม in · ชีตไม่มีรายการเว้นว่างได้ ระบบถือว่ายอดเป็น 0</p>
+          <button onclick="clearBranchCheckWorkbook()" class="border rounded-lg p-2 text-sm">ล้างไฟล์ที่อัปโหลด</button>
+        </div>
         <div id="branchCheckSources"></div>
         <p id="branchCheckMessage" role="status" class="text-sm text-slate-600"></p>
         <div class="border-t pt-4 space-y-3">

@@ -41,7 +41,7 @@ function branchCheckDate(value) {
   if(!match)throw Error('อ่านวันที่ไม่ได้: '+value);
   return normalizedDate(`${match[3]}-${match[2].padStart(2,'0')}-${match[1].padStart(2,'0')}`);
 }
-function parseBranchCheckFile(book,type,scope,allowUnscoped=false) {
+function parseBranchCheckFile(book,type,scope,allowUnscoped=false,allowEmpty=false) {
   const preferred={SALES:'ยอดขาย (วาง)',STOCK_IN:'iTec In (วาง)',STOCK_OUT:'iTec Out (วาง)',EXTRA_IN:'เครื่องดื่ม In (วาง)'}[type];
   const candidates=[];
   for(const name of book.SheetNames){
@@ -90,8 +90,46 @@ function parseBranchCheckFile(book,type,scope,allowUnscoped=false) {
       return cell?XLSX.utils.format_cell(cell):'';
     })});
   }
-  if(!rows.length)throw Error('ไม่พบรายการของสาขาที่เลือก หากไม่มีรายการจริงให้กด “วันนี้ไม่มีรายการ”');
+  if(!rows.length&&!allowEmpty)throw Error('ไม่พบรายการของสาขาที่เลือก หากไม่มีรายการจริงให้กด “วันนี้ไม่มีรายการ”');
   return {type,rows,skipped,unscoped,aggregateSales,quantityField,sheet:name,columns:headers,detailRows};
+}
+function parseBranchCheckWorkbook(book,scope,allowUnscoped=false) {
+  const normalize=name=>name.toLowerCase().replace(/itech/g,'itec').replace(/\(วาง\)/g,'').replace(/\s/g,'');
+  const files={},warnings=[];
+  for(const [type,label]of Object.entries(branchCheckLabels)) {
+    const names=book.SheetNames.filter(n=>normalize(n)===normalize(label));
+    if(names.length!==1)throw Error('ต้องมีชีต '+label+' เพียง 1 ชีต (ไม่มีรายการให้เว้นชีตว่างไว้)');
+    const name=names[0],sheet=book.Sheets[name],range=XLSX.utils.decode_range(sheet['!ref']||'A1');range.e.c=Math.min(range.e.c,79);
+    const grid=XLSX.utils.sheet_to_json(sheet,{header:1,defval:null,range});
+    let parsed;
+    if(!grid.some(row=>row.some(v=>v!=null&&String(v).trim()!=='')))parsed={type,rows:[],detailRows:[],columns:[],sheet:name,skipped:0};
+    else parsed=parseBranchCheckFile({SheetNames:[name],Sheets:{[name]:sheet}},type,scope,allowUnscoped,true);
+    if(!parsed.rows.length&&parsed.skipped){warnings.push(label+': พบแต่ข้อมูลต่างสาขา กรุณาตรวจไฟล์');continue;}
+    files[type]=parsed;
+  }
+  return {files,warnings};
+}
+async function loadBranchCheckWorkbook(input) {
+  const file=input.files?.[0];if(!file)return;
+  try {
+    const scope=branchCheckScope();ensureBranchCheckScope(scope);
+    const generation=branchCheckState.generation,token=Symbol('workbook');branchCheckState.workbookRead=token;
+    if(typeof XLSX==='undefined')throw Error('ไม่พบตัวอ่าน Excel');
+    if(file.size>100*1024*1024)throw Error('ไฟล์ใหญ่เกิน 100 MB');
+    $w('branchCheckMessage').textContent='กำลังอ่าน '+file.name;
+    const book=XLSX.read(await file.arrayBuffer(),{type:'array'});
+    if(generation!==branchCheckState.generation||branchCheckState.workbookRead!==token||scope.key!==branchCheckScope().key)return;
+    const parsed=parseBranchCheckWorkbook(book,scope,$w('branchCheckUnscoped').checked);
+    branchCheckState.files=Object.fromEntries(Object.entries(parsed.files).map(([type,value])=>[type,{...value,file:file.name}]));
+    branchCheckState.reads={};branchCheckState.detailPage=0;
+    $w('branchFileDetailSearch').value='';$w('branchFileDetailType').value='SALES';
+    $w('branchCheckMessage').textContent='อ่าน '+file.name+' แล้ว · ชีตว่างถือว่าไม่มีรายการ · ใช้วันที่ '+scope.date+(parsed.warnings.length?' · '+parsed.warnings.join(' / '):'');
+    renderBranchCheck();
+  }catch(e){$w('branchCheckMessage').textContent=e.message;}finally{input.value='';}
+}
+function clearBranchCheckWorkbook() {
+  branchCheckState.workbookRead=null;branchCheckState.reads={};branchCheckState.files={};
+  $w('branchCheckMessage').textContent='ล้างไฟล์แล้ว กรุณาเลือกไฟล์ใหม่';renderBranchCheck();
 }
 async function loadBranchCheckFile(type,input) {
   const file=input.files?.[0];if(!file)return;
@@ -190,7 +228,7 @@ function renderBranchCheck() {
   try{
     const scope=branchCheckScope();ensureBranchCheckScope(scope);
     $w('branchOpeningDate').textContent='ยอดบันทึก '+priorDay(scope.date);
-    $w('branchCheckSources').innerHTML=Object.keys(branchCheckLabels).map(type=>`<div class="bc-source"><strong>${esc(branchCheckLabels[type])}</strong><p>${esc(branchCheckState.files[type]?.file||'ยังไม่ได้อัปโหลด')}</p><label class="bc-upload">เลือกไฟล์ Excel<input type="file" accept=".xlsx,.xls,.csv" onchange="loadBranchCheckFile('${type}',this)"></label> <button onclick="zeroBranchCheck('${type}')">วันนี้ไม่มีรายการ</button>${branchCheckState.files[type]?` <button onclick="clearBranchCheckFile('${type}')">ล้างไฟล์</button>`:''}</div>`).join('');
+    $w('branchCheckSources').innerHTML=Object.keys(branchCheckLabels).map(type=>{const file=branchCheckState.files[type];return `<div class="bc-source"><strong>${esc(branchCheckLabels[type])}</strong><p>${file?esc(file.rows.length?file.rows.length+' รายการ · '+file.sheet:'ไม่มีรายการ (ชีตว่าง)'):'รอไฟล์ของสาขา'}</p></div>`;}).join('');
     $w('branchCheckBody').innerHTML=orderedCountEntries().map(([code,s],index)=>{
       const units=countUnits(s,code);
       const inputs=field=>{

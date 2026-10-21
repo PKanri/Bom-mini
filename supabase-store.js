@@ -76,7 +76,7 @@ function cloudRender() {
   $w('nav-tab-stock-overview').hidden=bomCloud.member?.role!=='admin';
   cloudArrangeNavigation(Boolean(branch));
   if(typeof resetStockOverview==='function')resetStockOverview();
-  if(branch)switchTab('tab-count');
+  if(branch)switchTab('tab-branch-check');
   $w('cloudMigrate').hidden=bomCloud.member?.role!=='admin';
   $w('cloudActions').hidden=!bomCloud.member;
   renderStockCountTable();
