@@ -18,9 +18,10 @@ function stockOverviewSnapshot(branch,date) {
   const previous=Object.keys(workflow.counts).filter(k=>k.startsWith(branch+':')&&k.slice(branch.length+1)<date&&hasCount(workflow.counts[k])).sort().reverse()[0];
   return {date:previous?previous.slice(branch.length+1):null,counts:previous?workflow.counts[previous]:{},current:false};
 }
-function openStockOverview() {
+async function openStockOverview() {
   if(!stockOverviewAllowed()){resetStockOverview();return;}
-  loadStockOverviewLayout();
+  await loadStockOverviewLayout();
+  if(!stockOverviewAllowed())return;
   renderStockOverviewPicker();
   if(!$w('stockOverviewDate').value)$w('stockOverviewDate').value=localDateString();
   renderStockOverview();
@@ -122,24 +123,31 @@ let stockOverviewBranchOrder=[];
 function stockOverviewStorageKey(){
   return 'ponn.stockOverview.layout.v1.'+(bomCloud.session?.user?.id||'local');
 }
-function loadStockOverviewLayout(){
+let stockOverviewLoadSequence=0;
+async function loadStockOverviewLayout(){
+  const seq=++stockOverviewLoadSequence,userId=bomCloud.session?.user?.id;
+  if(!userId)return;
   const key=stockOverviewStorageKey();
-  if(stockOverviewLayoutKey===key&&stockOverviewLayoutSource===workflow)return;
-  stockOverviewLayoutSource=workflow;
-  stockOverviewLayoutKey=key;stockOverviewBranchOrder=[];
-  $w('stockOverviewBranch').value='ALL';
-  $w('stockOverviewLayoutStatus').textContent='';
+  $w('stockOverviewLayoutStatus').textContent='กำลังโหลดรูปแบบสาขาที่บันทึกไว้…';
+  let accountSaved=null,readFailed=false;
   try{
-    const cloudSaved=workflow.stockOverviewLayouts?.[bomCloud.session?.user?.id];
-    let saved=cloudSaved;
-    if(!saved){try{saved=JSON.parse(localStorage.getItem(key)||'null');}catch{}}
-    $w('stockOverviewLayoutEditor').open=!cloudSaved;
-    if(saved&&Array.isArray(saved.branches)){
-      stockOverviewBranchOrder=[...new Set(saved.branches.filter(id=>typeof id==='string'))];
-      $w('stockOverviewBranch').value=saved.mode==='CUSTOM'?'CUSTOM':'ALL';
-      $w('stockOverviewLayoutStatus').textContent=cloudSaved?'ใช้รูปแบบที่บันทึกกับบัญชีแล้ว':'พบรูปแบบเดิมในเครื่องนี้ กดบันทึกเพื่อใช้ข้ามเบราว์เซอร์';
-    }
-  }catch(e){$w('stockOverviewLayoutStatus').textContent='อ่านรูปแบบที่บันทึกไว้ไม่ได้ กรุณาเลือกสาขาใหม่';}
+    const user=await cloudRequest('/auth/v1/user');
+    if(seq!==stockOverviewLoadSequence||bomCloud.session?.user?.id!==userId)return;
+    accountSaved=user.user_metadata?.stock_overview_layout;
+  }catch{readFailed=true;}
+  if(seq!==stockOverviewLoadSequence||bomCloud.session?.user?.id!==userId)return;
+  const legacy=workflow.stockOverviewLayouts?.[userId];
+  let saved=accountSaved||legacy;
+  if(!saved){try{saved=JSON.parse(localStorage.getItem(key)||'null');}catch{}}
+  // Never replace an existing in-memory selection with an empty list after a failed read.
+  if(!saved&&readFailed&&stockOverviewLayoutKey===key){
+    $w('stockOverviewLayoutStatus').textContent='โหลดรูปแบบจากบัญชีไม่สำเร็จ ยังแสดงรายการเดิม กรุณาเปิดหน้านี้ใหม่เพื่อลองอีกครั้ง';return;
+  }
+  stockOverviewLayoutKey=key;stockOverviewLayoutSource=workflow;
+  stockOverviewBranchOrder=Array.isArray(saved?.branches)?[...new Set(saved.branches.filter(id=>typeof id==='string'||typeof id==='number').map(String))]:[];
+  $w('stockOverviewBranch').value=saved?.mode==='CUSTOM'?'CUSTOM':'ALL';
+  $w('stockOverviewLayoutEditor').open=!saved;
+  $w('stockOverviewLayoutStatus').textContent=accountSaved?'ใช้รูปแบบที่บันทึกกับบัญชีแล้ว':saved?'พบรูปแบบเดิม กรุณากดบันทึกอีกครั้งเพื่อเก็บกับบัญชีโดยตรง':readFailed?'โหลดรูปแบบจากบัญชีไม่สำเร็จ กรุณาลองอีกครั้ง':'ยังไม่มีรูปแบบที่บันทึกไว้';
 }
 function stockOverviewSelectedBranches(mode){
   if(mode==='CUSTOM')return stockOverviewBranchOrder.filter(id=>Object.hasOwn(workflow.branches,id)).map(id=>[id,workflow.branches[id]]);
@@ -178,22 +186,24 @@ async function saveStockOverviewLayout(){
   if(!stockOverviewAllowed()||stockOverviewLayoutSaving)return;
   const userId=bomCloud.session?.user?.id;
   if(!userId){$w('stockOverviewLayoutStatus').textContent='กรุณาเข้าสู่ระบบก่อนบันทึก';return;}
-  const source=workflow,previous=source.stockOverviewLayouts;
   const saved={mode:$w('stockOverviewBranch').value,branches:[...stockOverviewBranchOrder]};
+  if(saved.mode==='CUSTOM'&&!saved.branches.length){$w('stockOverviewLayoutStatus').textContent='กรุณาเลือกอย่างน้อย 1 สาขาก่อนบันทึก';return;}
+  ++stockOverviewLoadSequence;
   stockOverviewLayoutSaving=true;
   const button=$w('stockOverviewSaveLayout');button.disabled=true;
   $w('stockOverviewLayoutStatus').textContent='กำลังบันทึกรูปแบบกับบัญชี…';
-  source.stockOverviewLayouts={...previous,[userId]:saved};
   try{
-    await storeWorkflow();
-    if(workflow!==source||bomCloud.session?.user?.id!==userId)return;
-    $w('stockOverviewLayoutStatus').textContent='บันทึกแล้ว เปิดเบราว์เซอร์อื่นด้วยบัญชีเดียวกันเพื่อใช้รูปแบบนี้';
+    await cloudRequest('/auth/v1/user',{method:'PUT',body:JSON.stringify({data:{stock_overview_layout:saved}})});
+    const user=await cloudRequest('/auth/v1/user');
+    if(bomCloud.session?.user?.id!==userId)return;
+    const stored=user.user_metadata?.stock_overview_layout;
+    if(stored?.mode!==saved.mode||JSON.stringify(stored.branches)!==JSON.stringify(saved.branches))throw Error('ตรวจสอบรูปแบบที่บันทึกไม่สำเร็จ กรุณาลองอีกครั้ง');
+    stockOverviewLayoutKey=stockOverviewStorageKey();
+    $w('stockOverviewLayoutStatus').textContent='บันทึกและตรวจสอบแล้ว เปิดครั้งถัดไปด้วยบัญชีเดียวกันจะใช้รูปแบบนี้';
     $w('stockOverviewLayoutEditor').open=false;
     try{localStorage.setItem(stockOverviewStorageKey(),JSON.stringify(saved));}catch{}
   }catch(e){
-    if(previous===undefined)delete source.stockOverviewLayouts;
-    else source.stockOverviewLayouts=previous;
-    if(workflow===source&&bomCloud.session?.user?.id===userId){
+    if(bomCloud.session?.user?.id===userId){
       $w('stockOverviewLayoutEditor').open=true;
       $w('stockOverviewLayoutStatus').textContent='บันทึกไม่สำเร็จ: '+e.message;
     }
