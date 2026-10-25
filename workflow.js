@@ -108,10 +108,12 @@ function handleImportTypeChange() {
   $w('previewTableBody').innerHTML = '';
   $w('importStatusBadge').textContent = 'รอไฟล์';
   $w('validationErrorsBox').classList.add('hidden');
+  renderMissingImportBom();
 }
 async function handleFileSelected(event) {
   const readVersion=++importReadVersion;
   importPreview = null; $w('commitImportBtn').disabled = true;
+  renderMissingImportBom();
   const file = event.target.files[0]; if (!file) return;
   const type = $w('importTypeSelect').value;
   const quantityField = sourceQuantityField(type);
@@ -129,6 +131,7 @@ async function handleFileSelected(event) {
     $w('previewTableHead').innerHTML = '<tr><th>สาขา</th><th>วันที่</th><th>รหัสสินค้า</th><th>ชื่อสินค้า</th><th>จำนวนต้นทาง</th></tr>';
     $w('previewTableBody').innerHTML = parsed.rows.slice(0,30).map(r=>`<tr><td class="p-2">${esc(r.branchName)} (${esc(r.branch)})</td><td>${r.date}</td><td>${esc(r.code)}</td><td>${esc(r.name)}</td><td>${fmt(r.qty)}</td></tr>`).join('');
     $w('commitImportBtn').disabled = parsed.errors.length > 0 || !workflowReady;
+    renderMissingImportBom();
   } catch (error) { $w('importStatusBadge').textContent = 'อ่านไม่สำเร็จ'; appAlert(error.message); }
 }
 async function commitImportData() {
@@ -138,10 +141,11 @@ async function commitImportData() {
   const before = structuredClone(workflow);
   $w('commitImportBtn').disabled = true;
   const aggregate = new Map();
+  const newMenuCodes=p.type==='SALES'?newImportMenuCodes(p.rows,appState.recipes,workflow.batches):new Set();
   p.rows.forEach(r => {
     workflow.branches[r.branch] = r.branchName;
     const id = JSON.stringify([r.branch,r.date,r.code]);
-    if (!aggregate.has(id)) aggregate.set(id, { branch:r.branch,date:r.date,code:r.code,name:r.name,qty:0,unit:r.unit });
+    if (!aggregate.has(id)) aggregate.set(id, { branch:r.branch,date:r.date,code:r.code,name:r.name,qty:0,unit:r.unit,...(newMenuCodes.has(r.code)?{newMenu:true}:{}) });
     aggregate.get(id).qty += r.qty;
   });
   workflow.batches[key] = { type:p.type,month:p.month,file:p.file,quantityField:p.quantityField,start:p.start,end:p.end,branches:[...new Set(p.rows.map(r=>r.branch))],rows:[...aggregate.values()],sourceRows:p.rows.length, importedAt:new Date().toISOString() };
@@ -153,6 +157,7 @@ async function commitImportData() {
   } catch (error) { workflow = before; storageError(error); $w('commitImportBtn').disabled = false; }
 }
 function renderImportHistory() {
+  renderMissingImportBom();
   $w('importHistory').innerHTML = Object.values(workflow.batches).map(b=>`<li>${esc(labels[b.type])} · ${esc(b.file)} · ${b.start} ถึง ${b.end} · ${b.branches.length} สาขา · ${fmt(b.sourceRows)} แถว</li>`).join('') || '<li>ยังไม่มีไฟล์ส่วนกลางที่บันทึก</li>';
   if(typeof refreshCleanupPeriods==='function')refreshCleanupPeriods();
 }
@@ -599,4 +604,34 @@ for(const name of ['saveNewMenu','saveNewMaterial','addIngredientToCurrentRecipe
     if(workflowReady)storeWorkflow().catch(error=>{appState.materials=before.materials;appState.recipes=before.recipes;renderBomModule();storageError(error);});
     return result;
   };
+}
+
+function newImportMenuCodes(rows,recipes,batches){
+  const previous=Object.values(batches||{}).filter(b=>b.type==='SALES').flatMap(b=>b.rows||[]);
+  const known=new Set(previous.map(r=>r.code));
+  const marked=new Set(previous.filter(r=>r.newMenu).map(r=>r.code));
+  const missing=missingImportBomRows(rows,recipes);
+  return new Set(missing.filter(r=>!known.has(r.code)||marked.has(r.code)).map(r=>r.code));
+}
+function missingImportBomRows(rows,recipes){
+  const byCode=new Map(recipes.map(r=>[r.menuCode,r]));
+  const missing=new Map();
+  for(const row of rows){
+    if(!row.code)continue;
+    const recipe=byCode.get(row.code);
+    if(recipe?.items?.length)continue;
+    if(!missing.has(row.code))missing.set(row.code,{code:row.code,name:row.name||row.code,reason:recipe?'มีเมนูแล้ว แต่ยังไม่มีวัตถุดิบในสูตร':'ยังไม่มีเมนูในสูตร BOM'});
+  }
+  return [...missing.values()].sort((a,b)=>a.code.localeCompare(b.code,undefined,{numeric:true}));
+}
+function renderMissingImportBom(){
+  const panel=$w('missingImportBomPanel');if(!panel)return;
+  const preview=importPreview?.type==='SALES'?importPreview:null;
+  const batches=Object.values(workflow.batches||{}).filter(b=>b.type==='SALES');
+  const rows=preview?preview.rows:batches.flatMap(b=>b.rows||[]);
+  panel.hidden=!preview&&!batches.length;
+  const missing=missingImportBomRows(rows,appState.recipes);
+  const newCodes=preview?newImportMenuCodes(rows,appState.recipes,workflow.batches):new Set(rows.filter(r=>r.newMenu).map(r=>r.code));
+  $w('missingImportBomSummary').textContent=(preview?'ไฟล์ที่กำลังตรวจ: '+preview.file:'ยอดขายส่วนกลางที่บันทึกแล้วทั้งหมด')+' · พบสินค้าที่ยังไม่มีสูตร '+missing.length+' รายการ (รวมรหัสซ้ำแล้ว)';
+  $w('missingImportBomBody').innerHTML=missing.map(r=>`<tr><td class="p-3">${esc(r.code)}</td><td class="p-3 font-semibold">${esc(r.name)}${newCodes.has(r.code)?'<span style="display:inline-block;margin-left:8px;padding:3px 9px;border-radius:999px;background:#dcfce7;color:#166534;font-size:12px;font-weight:700">เมนูใหม่</span>':''}</td><td class="p-3">${esc(r.reason)}</td></tr>`).join('')||'<tr><td colspan="3" class="p-3 text-emerald-700">สินค้าทุกรหัสมีสูตร BOM แล้ว</td></tr>';
 }

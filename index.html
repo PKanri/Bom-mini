@@ -447,6 +447,12 @@
           </div>
         </div>
       </div>
+      <div id="missingImportBomPanel" hidden class="bg-white border border-amber-200 rounded-2xl p-5 space-y-3">
+        <h3 class="font-bold">สินค้าจากยอดขายที่ยังไม่มีสูตร BOM</h3>
+        <p id="missingImportBomSummary" role="status" class="text-sm text-slate-600"></p>
+        <p class="text-sm text-amber-700">รายการเหล่านี้ยังไม่ถูกนำไปคำนวณการใช้วัตถุดิบตาม BOM สามารถนำเข้าได้ และเพิ่มสูตรในหน้า 1 ภายหลัง</p>
+        <div style="overflow:auto;max-height:420px"><table class="w-full text-left text-sm"><thead class="bg-slate-100"><tr><th class="p-3">รหัสสินค้า</th><th class="p-3">ชื่อสินค้า</th><th class="p-3">รายละเอียด</th></tr></thead><tbody id="missingImportBomBody"></tbody></table></div>
+      </div>
     </section>
 
     <!-- ==================================================================== -->
@@ -1100,6 +1106,7 @@
       if (tabId === 'tab-variance') renderVarianceDashboard();
       if (tabId === 'tab-branch-check') openBranchCheck();
       if (tabId === 'tab-stock-overview') openStockOverview();
+      if (tabId === 'tab-import' && typeof renderMissingImportBom==='function') renderMissingImportBom();
     }
 
     // 3. MODULE 1: BOM LOGIC & RENDERING
@@ -2272,7 +2279,7 @@
   <script src="vendor/xlsx.full.min.js"></script>
   <script src="ponn-template.js"></script>
   <script src="supabase-config.js"></script>
-  <script src="workflow.js?v=20261023-dialog"></script>
+  <script src="workflow.js?v=20261025-new-menu"></script>
   <script src="count-units.js?v=20261025-mobile"></script>
   <script src="supabase-store.js?v=20261025-order"></script>
   <script src="data-cleanup.js?v=20261023-dialog"></script>
