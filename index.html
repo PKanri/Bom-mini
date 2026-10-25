@@ -48,6 +48,26 @@
     .stock-badge-equal { background:#d1fae5; color:#047857; }
     .stock-badge-pending { background:#fef3c7; color:#92400e; }
     .stock-issues { margin-top:8px; max-width:270px; font-size:11px; color:#64748b; }
+
+    .count-mode-switch{display:flex;align-items:center;gap:8px;flex-wrap:wrap;font-size:14px}
+    .count-mode-switch button{border:1px solid #cbd5e1;border-radius:10px;padding:9px 16px;background:#fff;color:#475569}
+    .count-mode-switch button[aria-pressed="true"]{background:#ecfdf5;border-color:#059669;color:#047857;font-weight:700}
+    .count-mobile-save{display:none}
+    #tab-count.count-mobile .count-table-scroll{overflow:visible}
+    #tab-count.count-mobile .count-entry-table,#tab-count.count-mobile .count-entry-table tbody{display:block;width:100%}
+    #tab-count.count-mobile .count-entry-table thead{display:none}
+    #tab-count.count-mobile .count-entry-table tr{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:12px;padding:16px;margin:12px;border:1px solid #e2e8f0;border-radius:16px;background:white}
+    #tab-count.count-mobile .count-entry-table td{display:block;padding:0;min-width:0}
+    #tab-count.count-mobile .count-entry-table td:first-child,#tab-count.count-mobile .count-entry-table td:nth-child(n+4){grid-column:1 / -1}
+    #tab-count.count-mobile .count-entry-table td:nth-child(4){background:#ecfdf5;border-radius:10px;padding:10px;font-size:16px}
+    #tab-count.count-mobile .count-entry-table td:nth-child(4)::before{content:'ยอดรวม: ';font-size:14px}
+    #tab-count.count-mobile .count-entry-table td:nth-child(5)::before{content:'สูญเสีย / หน่วย';display:block;margin-bottom:6px;font-size:14px;font-weight:600}
+    #tab-count.count-mobile .count-entry-table td:nth-child(6)::before{content:'หมายเหตุ';display:block;margin-bottom:6px;font-size:14px;font-weight:600}
+    #tab-count.count-mobile input,#tab-count.count-mobile select{font-size:16px;min-height:46px;max-width:100%;box-sizing:border-box}
+    #tab-count.count-mobile .count-entry-table input,#tab-count.count-mobile .count-entry-table select{width:100%;margin-top:6px}
+    #tab-count.count-mobile .count-entry-table label{font-size:14px}
+    #tab-count.count-mobile .count-mobile-save{display:block;position:sticky;bottom:12px;z-index:20;padding:10px;background:#ffffffed;border:1px solid #e2e8f0;border-radius:14px;box-shadow:0 3px 14px #0f172a12}
+    .count-mobile-save button{width:100%;min-height:48px;border-radius:10px;background:#059669;color:white;font-size:16px;font-weight:700}
     /* Custom scrollbars and transitions */
     ::-webkit-scrollbar { width: 6px; height: 6px; }
     ::-webkit-scrollbar-track { background: rgba(0, 0, 0, 0.03); }
@@ -433,6 +453,11 @@
     <!-- MODULE 3: DAILY PHYSICAL STOCK COUNT -->
     <!-- ==================================================================== -->
     <section id="tab-count" class="tab-content hidden space-y-6">
+      <div class="count-mode-switch" role="group" aria-label="โหมดกรอกยอดตรวจนับ">
+        <span>โหมดกรอกยอด</span>
+        <button id="countModeDesktop" type="button" onclick="setCountEntryMode('desktop')" aria-pressed="false">คอมพิวเตอร์</button>
+        <button id="countModeMobile" type="button" onclick="setCountEntryMode('mobile')" aria-pressed="false">มือถือ</button>
+      </div>
       <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-[var(--card,#ffffff)] p-5 rounded-2xl border border-[var(--border,#e2e8f0)] shadow-xs">
         <div>
           <h2 class="text-lg font-bold text-[var(--foreground,#0f172a)] flex items-center gap-2">
@@ -470,8 +495,8 @@
 
       <!-- Count Table -->
       <div class="bg-[var(--card,#ffffff)] rounded-2xl border border-[var(--border,#e2e8f0)] shadow-xs overflow-hidden">
-        <div class="overflow-x-auto">
-          <table class="w-full text-left text-xs">
+        <div class="overflow-x-auto count-table-scroll">
+          <table class="w-full text-left text-xs count-entry-table">
             <thead class="bg-slate-100"><tr><th class="p-3">วัตถุดิบสำคัญ</th><th class="p-3">คงเหลือหน่วยหลัก</th><th class="p-3">คงเหลือเศษ</th><th class="p-3">ยอดรวมอัตโนมัติ</th><th class="p-3">สูญเสีย / หน่วย</th><th class="p-3">หมายเหตุ</th></tr></thead>
             <tbody id="stockCountTableBody" class="divide-y divide-slate-100">
               <!-- Rendered by JS -->
@@ -479,6 +504,7 @@
           </table>
         </div>
       </div>
+      <div class="count-mobile-save"><button type="button" onclick="savePhysicalStockCount()">บันทึกยอดตรวจนับ</button></div>
     </section>
 
     <!-- ==================================================================== -->
@@ -2247,7 +2273,7 @@
   <script src="ponn-template.js"></script>
   <script src="supabase-config.js"></script>
   <script src="workflow.js?v=20261023-dialog"></script>
-  <script src="count-units.js?v=20261025-order"></script>
+  <script src="count-units.js?v=20261025-mobile"></script>
   <script src="supabase-store.js?v=20261025-order"></script>
   <script src="data-cleanup.js?v=20261023-dialog"></script>
   <script src="data-restore.js?v=20261023-dialog"></script>

@@ -115,9 +115,9 @@ function renderStockCountTable() {
     const loss=c.unitInputs?c.loss??'':c.waste!=null?c.waste/lossFactor:c.loss!=null?Number(c.loss)/(s.countDivisor||1)/lossFactor:'';
     const total=values.some(v=>v!=='')?values.reduce((sum,v,j)=>sum+Number(v)*units[j].factor,0):null;
     return `<tr data-count-code="${esc(code)}"><td class="p-3"><strong style="display:block;font-size:16px;font-weight:700;line-height:1.5">${esc(s.name)}</strong><small>${esc(code)}</small>${count?.unitReview?'<p class="text-amber-700">ยอดเดิมต่างหน่วย กรุณาตรวจนับใหม่</p>':''}</td>
-      ${[0,1].map(j=>{const u=units[j];return u?`<td class="p-3"><label class="text-xs font-semibold">${esc(u.label)}<input id="count-unit-${i}-${j}" type="number" min="0" step="any" value="${esc(values[j])}" oninput="updateCountTotal(${i})" placeholder="จำนวน${esc(u.label)}" aria-label="คงเหลือ ${esc(s.name)} หน่วย ${esc(u.label)}" class="block border rounded-lg p-2 w-28 mt-1" ${!branch?'disabled':''}></label></td>`:'<td class="p-3 text-slate-400"><input disabled placeholder="– ไม่มีเศษ" class="border rounded-lg p-2 w-28 bg-slate-100"></td>';}).join('')}
+      ${[0,1].map(j=>{const u=units[j];return u?`<td class="p-3"><label class="text-xs font-semibold">${esc(u.label)}<input id="count-unit-${i}-${j}" type="number" inputmode="decimal" min="0" step="any" value="${esc(values[j])}" oninput="updateCountTotal(${i})" placeholder="จำนวน${esc(u.label)}" aria-label="คงเหลือ ${esc(s.name)} หน่วย ${esc(u.label)}" class="block border rounded-lg p-2 w-28 mt-1" ${!branch?'disabled':''}></label></td>`:'<td class="p-3 text-slate-400"><input disabled placeholder="– ไม่มีเศษ" class="border rounded-lg p-2 w-28 bg-slate-100"></td>';}).join('')}
       <td id="count-total-${i}" class="p-3 text-emerald-700 font-semibold">${total==null?'ยังไม่ได้นับ':fmt(total/units[0].factor)+' '+esc(units[0].label)}</td>
-      <td class="p-3"><input id="count-loss-${i}" type="number" min="0" step="any" value="${esc(loss)}" oninput="rememberCountDraft()" placeholder="จำนวนสูญเสีย" class="border rounded-lg p-2 w-24" ${!branch?'disabled':''}><select id="count-loss-unit-${i}" onchange="rememberCountDraft()" class="border rounded-lg p-2" ${!branch?'disabled':''}>${units.map(u=>`<option value="${esc(u.label)}" ${u.label===savedLossUnit?'selected':''}>${esc(u.label)}</option>`).join('')}</select></td>
+      <td class="p-3"><input id="count-loss-${i}" type="number" inputmode="decimal" min="0" step="any" value="${esc(loss)}" oninput="rememberCountDraft()" placeholder="จำนวนสูญเสีย" class="border rounded-lg p-2 w-24" ${!branch?'disabled':''}><select id="count-loss-unit-${i}" onchange="rememberCountDraft()" class="border rounded-lg p-2" ${!branch?'disabled':''}>${units.map(u=>`<option value="${esc(u.label)}" ${u.label===savedLossUnit?'selected':''}>${esc(u.label)}</option>`).join('')}</select></td>
       <td class="p-3"><input id="count-note-${i}" value="${esc(c.remarks||'')}" oninput="rememberCountDraft()" placeholder="หมายเหตุ" class="border rounded-lg p-2" ${!branch?'disabled':''}></td></tr>`;
   }).join('')||'<tr><td colspan="6" class="p-6">กำหนดวัตถุดิบสำคัญในเมนู 1 ก่อน</td></tr>';
   const savedItems=Object.values(workflow.counts[activeCountScope]||{}).filter(c=>c.qty!=null).length;
@@ -175,3 +175,18 @@ async function savePhysicalStockCount() {
   catch(error){workflow.counts[key]=previous;storageError(error);}
 }
 
+
+// Change presentation only: the same inputs retain all unsaved quantities.
+function setCountEntryMode(mode,remember=true){
+  const mobile=mode==='mobile';
+  document.getElementById('tab-count').classList.toggle('count-mobile',mobile);
+  document.getElementById('countModeDesktop').setAttribute('aria-pressed',String(!mobile));
+  document.getElementById('countModeMobile').setAttribute('aria-pressed',String(mobile));
+  if(remember)try{localStorage.setItem('ponn.countEntryMode',mobile?'mobile':'desktop');}catch{}
+}
+function initializeCountEntryMode(){
+  let saved;try{saved=localStorage.getItem('ponn.countEntryMode');}catch{}
+  const mode=['mobile','desktop'].includes(saved)?saved:(window.matchMedia('(max-width: 767px)').matches?'mobile':'desktop');
+  setCountEntryMode(mode,false);
+}
+window.addEventListener('DOMContentLoaded',initializeCountEntryMode);
