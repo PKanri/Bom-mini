@@ -72,7 +72,8 @@ function displayCountInputs(count, units, setting) {
 }
 // Explicit count-sheet order, independent of JSON/JSONB property ordering.
 function orderedCountEntries() {
-  const order=new Map(Object.keys(COUNT_UNIT_LIST).map((code,index)=>[code,index]));
+  const codes=[...new Set([...(workflow.criticalOrder||[]),...Object.keys(COUNT_UNIT_LIST)])];
+  const order=new Map(codes.map((code,index)=>[code,index]));
   return criticalEntries().sort(([a],[b])=>(order.get(a)??Number.MAX_SAFE_INTEGER)-(order.get(b)??Number.MAX_SAFE_INTEGER)||a.localeCompare(b));
 }
 function rememberCountDraft() {
@@ -113,7 +114,7 @@ function renderStockCountTable() {
     const lossFactor=units.find(u=>u.label===savedLossUnit).factor;
     const loss=c.unitInputs?c.loss??'':c.waste!=null?c.waste/lossFactor:c.loss!=null?Number(c.loss)/(s.countDivisor||1)/lossFactor:'';
     const total=values.some(v=>v!=='')?values.reduce((sum,v,j)=>sum+Number(v)*units[j].factor,0):null;
-    return `<tr data-count-code="${esc(code)}"><td class="p-3">${esc(s.name)}<br><small>${esc(code)}</small>${count?.unitReview?'<p class="text-amber-700">ยอดเดิมต่างหน่วย กรุณาตรวจนับใหม่</p>':''}</td>
+    return `<tr data-count-code="${esc(code)}"><td class="p-3"><strong style="display:block;font-size:16px;font-weight:700;line-height:1.5">${esc(s.name)}</strong><small>${esc(code)}</small>${count?.unitReview?'<p class="text-amber-700">ยอดเดิมต่างหน่วย กรุณาตรวจนับใหม่</p>':''}</td>
       ${[0,1].map(j=>{const u=units[j];return u?`<td class="p-3"><label class="text-xs font-semibold">${esc(u.label)}<input id="count-unit-${i}-${j}" type="number" min="0" step="any" value="${esc(values[j])}" oninput="updateCountTotal(${i})" placeholder="จำนวน${esc(u.label)}" aria-label="คงเหลือ ${esc(s.name)} หน่วย ${esc(u.label)}" class="block border rounded-lg p-2 w-28 mt-1" ${!branch?'disabled':''}></label></td>`:'<td class="p-3 text-slate-400"><input disabled placeholder="– ไม่มีเศษ" class="border rounded-lg p-2 w-28 bg-slate-100"></td>';}).join('')}
       <td id="count-total-${i}" class="p-3 text-emerald-700 font-semibold">${total==null?'ยังไม่ได้นับ':fmt(total/units[0].factor)+' '+esc(units[0].label)}</td>
       <td class="p-3"><input id="count-loss-${i}" type="number" min="0" step="any" value="${esc(loss)}" oninput="rememberCountDraft()" placeholder="จำนวนสูญเสีย" class="border rounded-lg p-2 w-24" ${!branch?'disabled':''}><select id="count-loss-unit-${i}" onchange="rememberCountDraft()" class="border rounded-lg p-2" ${!branch?'disabled':''}>${units.map(u=>`<option value="${esc(u.label)}" ${u.label===savedLossUnit?'selected':''}>${esc(u.label)}</option>`).join('')}</select></td>
@@ -148,14 +149,14 @@ function countAnomalyWarnings(branch,date,next,previous,entries) {
 }
 async function savePhysicalStockCount() {
   const branch=$w('stockCountBranchInput').value,date=$w('stockCountDateInput').value;
-  if(!branch||!date||!criticalEntries().length){alert('เลือกสาขา วันที่ และวัตถุดิบก่อนบันทึก');return;}
+  if(!branch||!date||!criticalEntries().length){appAlert('เลือกสาขา วันที่ และวัตถุดิบก่อนบันทึก');return;}
   const key=countKey(branch,date),previous=structuredClone(workflow.counts[key]||{}),next={...previous};
   for(const [[code,s],i] of orderedCountEntries().map((entry,i)=>[entry,i])){
     const units=countUnits(s,code),unitInputs=units.map((u,j)=>({...u,value:$w(`count-unit-${i}-${j}`).value}));
     const loss=$w('count-loss-'+i).value,lossUnit=$w('count-loss-unit-'+i).value;
     const hasCount=unitInputs.some(u=>u.value!=='');
     if(!hasCount){
-      if(loss!==''&&Number(loss)!==0){alert('กรอกยอดคงเหลือด้วยเมื่อระบุของสูญเสีย');return;}
+      if(loss!==''&&Number(loss)!==0){appAlert('กรอกยอดคงเหลือด้วยเมื่อระบุของสูญเสีย');return;}
       if(!previous[code]?.unitReview){
         if(previous[code]?.receiptQty!=null){next[code]={receipt:previous[code].receipt,receiptUnit:previous[code].receiptUnit,receiptQty:previous[code].receiptQty};}
         else delete next[code];
@@ -163,12 +164,12 @@ async function savePhysicalStockCount() {
       continue;
     }
     const lossFactor=units.find(u=>u.label===lossUnit)?.factor;
-    if(unitInputs.some(u=>!Number.isFinite(Number(u.value))||Number(u.value)<0)||!Number.isFinite(Number(loss))||Number(loss)<0||!lossFactor){alert('จำนวนต้องเป็นตัวเลขตั้งแต่ 0 ขึ้นไป และเลือกหน่วยสูญเสีย');return;}
+    if(unitInputs.some(u=>!Number.isFinite(Number(u.value))||Number(u.value)<0)||!Number.isFinite(Number(loss))||Number(loss)<0||!lossFactor){appAlert('จำนวนต้องเป็นตัวเลขตั้งแต่ 0 ขึ้นไป และเลือกหน่วยสูญเสีย');return;}
     next[code]={...(previous[code]?.receiptQty!=null?{receipt:previous[code].receipt,receiptUnit:previous[code].receiptUnit,receiptQty:previous[code].receiptQty}:{}),qty:unitInputs.reduce((sum,u)=>sum+Number(u.value)*u.factor,0),unitInputs,loss,lossUnit,waste:Number(loss)*lossFactor,remarks:$w('count-note-'+i).value,updatedAt:new Date().toISOString()};
   }
-  if(Object.values(next).some(c=>c.qty!=null&&(!Number.isFinite(c.qty)||!Number.isFinite(c.waste)))){alert('ยอดรวมสูงเกินไปหรือหน่วยแปลงไม่ถูกต้อง กรุณาตรวจตัวเลข');return;}
+  if(Object.values(next).some(c=>c.qty!=null&&(!Number.isFinite(c.qty)||!Number.isFinite(c.waste)))){appAlert('ยอดรวมสูงเกินไปหรือหน่วยแปลงไม่ถูกต้อง กรุณาตรวจตัวเลข');return;}
   const warnings=countAnomalyWarnings(branch,date,next,previous,orderedCountEntries());
-  if(warnings.length&&!confirm(`พบ ${warnings.length} รายการที่ควรตรวจซ้ำ · สาขา ${workflow.branches[branch]||branch} · ${date}\n\n${warnings.join('\n\n')}\n\nการรับสินค้า/การใช้งานจริงอาจทำให้ยอดเปลี่ยนได้ หากตรวจแล้วถูกต้อง กดตกลงเพื่อบันทึก หรือยกเลิกเพื่อแก้ไข`))return;
+  if(warnings.length&&!await appConfirm(`พบ ${warnings.length} รายการที่ควรตรวจซ้ำ · สาขา ${workflow.branches[branch]||branch} · ${date}\n\n${warnings.join('\n\n')}\n\nการรับสินค้า/การใช้งานจริงอาจทำให้ยอดเปลี่ยนได้ หากตรวจแล้วถูกต้อง กดตกลงเพื่อบันทึก หรือยกเลิกเพื่อแก้ไข`))return;
   workflow.counts[key]=next;
   try{await storeWorkflow();delete countDrafts[key];$w('countSaveStatus').textContent=`บันทึกแล้ว ${workflow.branches[branch]} · ${date} · ระบบแปลงหน่วยให้แล้ว`;$w('varianceBranchInput').value=branch;$w('varianceDailyInput').value=date;appState.varianceFilter.branch=branch;appState.varianceFilter.dailyDate=date;}
   catch(error){workflow.counts[key]=previous;storageError(error);}

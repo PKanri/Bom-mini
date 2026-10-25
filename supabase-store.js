@@ -73,6 +73,7 @@ function cloudRender() {
   $w('nav-tab-bom').hidden=false;
   $w('nav-tab-import').hidden=Boolean(branch);
   $w('cloudRestoreMenu').hidden=bomCloud.member?.role!=='admin';
+  $w('criticalLayoutPanel').hidden=bomCloud.member?.role!=='admin';
   $w('nav-tab-stock-overview').hidden=bomCloud.member?.role!=='admin';
   cloudArrangeNavigation(Boolean(branch));
   if(typeof resetStockOverview==='function')resetStockOverview();
@@ -132,13 +133,13 @@ function cloudSave(snapshot) {
 }
 async function cloudReload() {
   if(!bomCloud.session||!bomCloud.member){await initializeCloudUI();return;}
-  if(bomCloud.busy || !confirm('โหลดข้อมูลล่าสุดจากฐานข้อมูล? ข้อมูลที่กรอกแต่ยังไม่ได้บันทึกจะถูกยกเลิก'))return;
+  if(bomCloud.busy || !await appConfirm('โหลดข้อมูลล่าสุดจากฐานข้อมูล? ข้อมูลที่กรอกแต่ยังไม่ได้บันทึกจะถูกยกเลิก'))return;
   bomCloud.busy=true;
   try{await bomCloud.queue;await cloudLoad();}catch(error){cloudStatus(error.message);}finally{bomCloud.busy=false;}
 }
 async function cloudMigrateLocal() {
   if(bomCloud.busy||bomCloud.member?.role!=='admin')return;
-  if(!confirm('นำข้อมูลเดิมจากเบราว์เซอร์นี้ขึ้น Supabase? จะทำได้เมื่อฐานข้อมูลยังไม่มีไฟล์นำเข้าหรือยอดตรวจนับ และจะแทนที่สูตร/การตั้งค่าด้วยข้อมูลเดิม'))return;
+  if(!await appConfirm('นำข้อมูลเดิมจากเบราว์เซอร์นี้ขึ้น Supabase? จะทำได้เมื่อฐานข้อมูลยังไม่มีไฟล์นำเข้าหรือยอดตรวจนับ และจะแทนที่สูตร/การตั้งค่าด้วยข้อมูลเดิม'))return;
   bomCloud.busy=true;
   try {
     await bomCloud.queue;await cloudLoad();
@@ -187,6 +188,8 @@ function cloudClearSession() {
   cloudArrangeNavigation(false);
   $w('nav-tab-stock-overview').hidden=true;
   $w('cloudRestoreMenu').hidden=true;
+  $w('criticalLayoutPanel').hidden=true;
+  $w('criticalLayoutEditor').open=false;
   if(typeof resetStockOverview==='function')resetStockOverview();
   if(typeof resetBranchCheck==='function')resetBranchCheck();
   if(typeof resetRestore==='function')resetRestore();
@@ -219,7 +222,7 @@ async function cloudSignIn() {
 }
 async function cloudSignOut() {
   if(bomCloud.busy||bomCloud.maintenance)return;
-  if(!confirm('ออกจากระบบ? ข้อมูลที่ยังไม่ได้กดบันทึกจะถูกยกเลิก'))return;
+  if(!await appConfirm('ออกจากระบบ? ข้อมูลที่ยังไม่ได้กดบันทึกจะถูกยกเลิก'))return;
   bomCloud.busy=true;
   try {
     await bomCloud.queue.catch(()=>{});

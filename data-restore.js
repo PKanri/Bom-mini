@@ -46,7 +46,7 @@ async function previewRestoreFile(file) {
   if(restoreBusy)return;
   resetRestore();
   if(!file)return;
-  if(!workflowReady||bomCloud.member?.role!=='admin'){alert('เฉพาะส่วนกลางที่เข้าสู่ระบบแล้ว');return;}
+  if(!workflowReady||bomCloud.member?.role!=='admin'){appAlert('เฉพาะส่วนกลางที่เข้าสู่ระบบแล้ว');return;}
   restoreBusy=true;$w('restoreFile').disabled=true;
   try {
     if(file.size>100*1024*1024)throw Error('ไฟล์ใหญ่เกิน 100 MB');
@@ -75,7 +75,7 @@ function downloadRestoreSafetyBackup() {
 async function commitRestore() {
   updateRestoreButton();if($w('restoreCommit').disabled||bomCloud.busy||bomCloud.maintenance)return;
   const plan=restorePlan;
-  if(!confirm(`กู้คืน ${plan.changes.length} แถวจัดเก็บเข้า Supabase (แทนที่ ${plan.conflicts.length} แถว)? สูตร BOM ไม่เปลี่ยน ข้อมูลที่ยังไม่บันทึกในหน้าจอจะถูกยกเลิก`))return;
+  if(!await appConfirm(`กู้คืน ${plan.changes.length} แถวจัดเก็บเข้า Supabase (แทนที่ ${plan.conflicts.length} แถว)? สูตร BOM ไม่เปลี่ยน ข้อมูลที่ยังไม่บันทึกในหน้าจอจะถูกยกเลิก`))return;
   restoreBusy=true;updateRestoreButton();$w('restoreFile').disabled=true;
   let committed=false;
   try {

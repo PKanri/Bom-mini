@@ -62,7 +62,7 @@ async function storeWorkflow() {
   workflowSaveQueue = workflowSaveQueue.catch(() => {}).then(save);
   return workflowSaveQueue;
 }
-function storageError(error) { alert('บันทึกไม่สำเร็จ: ' + error.message); }
+function storageError(error) { appAlert('บันทึกไม่สำเร็จ: ' + error.message); }
 function parseSourceWorkbook(book, type, quantityField) {
   quantityField = sourceQuantityField(type);
   const result = [], errors = [];
@@ -129,12 +129,12 @@ async function handleFileSelected(event) {
     $w('previewTableHead').innerHTML = '<tr><th>สาขา</th><th>วันที่</th><th>รหัสสินค้า</th><th>ชื่อสินค้า</th><th>จำนวนต้นทาง</th></tr>';
     $w('previewTableBody').innerHTML = parsed.rows.slice(0,30).map(r=>`<tr><td class="p-2">${esc(r.branchName)} (${esc(r.branch)})</td><td>${r.date}</td><td>${esc(r.code)}</td><td>${esc(r.name)}</td><td>${fmt(r.qty)}</td></tr>`).join('');
     $w('commitImportBtn').disabled = parsed.errors.length > 0 || !workflowReady;
-  } catch (error) { $w('importStatusBadge').textContent = 'อ่านไม่สำเร็จ'; alert(error.message); }
+  } catch (error) { $w('importStatusBadge').textContent = 'อ่านไม่สำเร็จ'; appAlert(error.message); }
 }
 async function commitImportData() {
   if (!importPreview || importPreview.errors.length || !workflowReady) return;
   const p = importPreview, key = `${p.type}:${p.month}`;
-  if (workflow.batches[key] && !confirm(`แทนที่ไฟล์${labels[p.type]}ของเดือน ${p.month} ทั้งชุดหรือไม่? ใช้ไฟล์รวมฉบับล่าสุด ยอดตรวจนับจะคงอยู่`)) return;
+  if (workflow.batches[key] && !await appConfirm(`แทนที่ไฟล์${labels[p.type]}ของเดือน ${p.month} ทั้งชุดหรือไม่? ใช้ไฟล์รวมฉบับล่าสุด ยอดตรวจนับจะคงอยู่`)) return;
   const before = structuredClone(workflow);
   $w('commitImportBtn').disabled = true;
   const aggregate = new Map();
@@ -184,7 +184,7 @@ function renderCriticalSettings() {
 async function removeCriticalProduct(code, button) {
   const setting = workflow.settings[code];
   if (!setting?.critical) return;
-  if (!workflowReady) { alert('กรุณารอให้ระบบเปิดข้อมูลเสร็จก่อน'); return; }
+  if (!workflowReady) { appAlert('กรุณารอให้ระบบเปิดข้อมูลเสร็จก่อน'); return; }
   if (button) button.disabled = true;
   rememberCountDraft();
   setting.critical = false;
@@ -257,14 +257,14 @@ async function saveCriticalProduct() {
   const unit=material?.baseUnit || workflow.settings[code]?.unit || $w('criticalUnit').value.trim();
   const inFactor=readCriticalFactor('In'), outFactor=readCriticalFactor('Out');
   const cost=workflow.settings[code]?.cost??null;
-  if (!code || !unit || !Number.isFinite(inFactor) || !Number.isFinite(outFactor) || inFactor<=0 || outFactor<=0) { alert('ระบุหน่วยรายงาน และกรอกจำนวนในไฟล์ของรับเข้าและจ่ายออกให้มากกว่า 0'); return; }
+  if (!code || !unit || !Number.isFinite(inFactor) || !Number.isFinite(outFactor) || inFactor<=0 || outFactor<=0) { appAlert('ระบุหน่วยรายงาน และกรอกจำนวนในไฟล์ของรับเข้าและจ่ายออกให้มากกว่า 0'); return; }
   const existing=appState.materials.find(m=>m.code===code), name=sourceCatalog().get(code)||existing?.name||code;
   const old=workflow.settings[code];
-  if (old && old.unit!==unit && Object.values(workflow.counts).some(c=>c[code]!=null)) { alert('วัตถุดิบนี้มียอดนับแล้ว ไม่สามารถเปลี่ยนหน่วยฐานได้'); return; }
+  if (old && old.unit!==unit && Object.values(workflow.counts).some(c=>c[code]!=null)) { appAlert('วัตถุดิบนี้มียอดนับแล้ว ไม่สามารถเปลี่ยนหน่วยฐานได้'); return; }
   const before=structuredClone(workflow), materialsBefore=structuredClone(appState.materials);
   workflow.settings[code]={...old,name,unit,inFactor,outFactor,cost,critical:$w('criticalEnabled').checked};
   if (existing) {
-    if (existing.baseUnit!==unit && appState.recipes.some(r=>r.items.some(i=>i.materialId===existing.id))) { workflow=before; alert('หน่วยฐานไม่ตรงกับสูตร BOM เดิม กรุณาใช้หน่วยเดียวกัน'); return; }
+    if (existing.baseUnit!==unit && appState.recipes.some(r=>r.items.some(i=>i.materialId===existing.id))) { workflow=before; appAlert('หน่วยฐานไม่ตรงกับสูตร BOM เดิม กรุณาใช้หน่วยเดียวกัน'); return; }
     Object.assign(existing,{baseUnit:unit, mainUnit:unit, mainFactor:1, subUnit:unit, subFactor:1, costPerBase:cost??0});
   } else appState.materials.push({id:'source-'+code,code,name,category:'วัตถุดิบสำคัญ',baseUnit:unit,mainUnit:unit,mainFactor:1,subUnit:unit,subFactor:1,costPerBase:cost??0});
   try { await storeWorkflow(); renderCriticalSettings(); renderBomModule(); } catch(error) {workflow=before;appState.materials=materialsBefore;storageError(error);}
@@ -282,10 +282,10 @@ function materialEditLocks(mat) {
 }
 function openSelectedMaterialEditor() {
   const mat = appState.materials.find(m => m.id === $w('ingredientSelectInput').value);
-  if (!mat) { alert('กรุณาเลือกวัตถุดิบที่ต้องการแก้ไข'); return; }
+  if (!mat) { appAlert('กรุณาเลือกวัตถุดิบที่ต้องการแก้ไข'); return; }
   editingMaterialId = mat.id;
   const recipe = appState.recipes.find(r => r.menuId === appState.selectedMenuId);
-  if (!recipe) { alert('กรุณาเลือกเมนูอาหารก่อน'); return; }
+  if (!recipe) { appAlert('กรุณาเลือกเมนูอาหารก่อน'); return; }
   editingRecipeId = recipe.menuId;
   const item = recipe.items.find(i => i.materialId === mat.id);
   $w('editMaterialRecipe').textContent = `ปริมาณสำหรับเมนู: ${recipe.menuName} (ต่อ 1 จาน)`;
@@ -419,14 +419,14 @@ function filterStockCountRows() {
 }
 async function savePhysicalStockCount() {
   const branch=$w('stockCountBranchInput').value,date=$w('stockCountDateInput').value;
-  if (!branch || !date || !criticalEntries().length) {alert('เลือกสาขา วันที่ และกำหนดวัตถุดิบสำคัญก่อนบันทึก');return;}
+  if (!branch || !date || !criticalEntries().length) {appAlert('เลือกสาขา วันที่ และกำหนดวัตถุดิบสำคัญก่อนบันทึก');return;}
   const key=countKey(branch,date), previous=structuredClone(workflow.counts[key]||{}), next={...previous};
   for (const [[code],i] of criticalEntries().map((entry,i)=>[entry,i])) {
     const raw=$w('count-value-'+i).value, subRaw=$w('count-sub-'+i).value, lossRaw=$w('count-loss-'+i).value;
     if (raw==='' && subRaw==='' && lossRaw==='') {if(!previous[code]?.unitReview)delete next[code];continue;}
-    if(raw==='' && subRaw===''){alert('กรอกยอดคงเหลือด้วยเมื่อระบุของสูญเสีย');return;}
+    if(raw==='' && subRaw===''){appAlert('กรอกยอดคงเหลือด้วยเมื่อระบุของสูญเสีย');return;}
     const main=Number(raw),sub=Number(subRaw),loss=Number(lossRaw),divisor=workflow.settings[code].countDivisor||1;
-    if([main,sub,loss].some(n=>!Number.isFinite(n)||n<0)){alert('ยอดนับและสูญเสียต้องเป็นตัวเลขตั้งแต่ 0 ขึ้นไป');return;}
+    if([main,sub,loss].some(n=>!Number.isFinite(n)||n<0)){appAlert('ยอดนับและสูญเสียต้องเป็นตัวเลขตั้งแต่ 0 ขึ้นไป');return;}
     next[code]={qty:main+sub/divisor,main,sub,loss,waste:loss/divisor,remarks:$w('count-note-'+i).value,updatedAt:new Date().toISOString()};
   }
   workflow.counts[key]=next;
@@ -554,7 +554,7 @@ setVarianceViewType=function(type){originalSetVarianceViewType(type);renderVaria
 function exportVarianceReport() {
   // Refresh from the current controls, then export exactly the displayed view.
   renderVarianceDashboard();
-  if(!visibleVarianceRows.length){alert('ยังไม่มีข้อมูลรายงาน');return;}
+  if(!visibleVarianceRows.length){appAlert('ยังไม่มีข้อมูลรายงาน');return;}
   const daily=appState.varianceFilter.viewType==='trend';
   const rows=visibleVarianceRows.map(r=>{
     const d=stockDifference(r),pct=d.pct==null?'':(d.pct>0?'+':'')+d.pct.toLocaleString('th-TH',{maximumFractionDigits:1})+'%';
@@ -592,10 +592,10 @@ window.addEventListener('DOMContentLoaded',async()=>{
 // Persist changes made through the existing BOM editor as well as branch data.
 for(const name of ['saveNewMenu','saveNewMaterial','addIngredientToCurrentRecipe','deleteIngredientFromRecipe']){
   const original=window[name];
-  window[name]=function(...args){
-    if(typeof BOM_SUPABASE!=='undefined' && (!workflowReady || !['admin','branch'].includes(bomCloud.member?.role))){alert('ยังไม่พร้อมแก้ไขสูตร กรุณาตรวจการเชื่อมต่อฐานข้อมูล');return;}
+  window[name]=async function(...args){
+    if(typeof BOM_SUPABASE!=='undefined' && (!workflowReady || !['admin','branch'].includes(bomCloud.member?.role))){appAlert('ยังไม่พร้อมแก้ไขสูตร กรุณาตรวจการเชื่อมต่อฐานข้อมูล');return;}
     const before=structuredClone({materials:appState.materials,recipes:appState.recipes});
-    const result=original(...args);
+    const result=await original(...args);
     if(workflowReady)storeWorkflow().catch(error=>{appState.materials=before.materials;appState.recipes=before.recipes;renderBomModule();storageError(error);});
     return result;
   };

@@ -60,10 +60,10 @@ function makeCleanupPlan(documents,period) {
 }
 async function prepareCleanup() {
   if(cleanupBusy)return;
-  if(!workflowReady||bomCloud.member?.role!=='admin'){alert('เฉพาะผู้ดูแลระบบเท่านั้น');return;}
+  if(!workflowReady||bomCloud.member?.role!=='admin'){appAlert('เฉพาะผู้ดูแลระบบเท่านั้น');return;}
   const period=cleanupSelection(),range=$w('cleanupMode').value==='range',start=$w('cleanupStart').value,end=$w('cleanupEnd').value;
-  if(range&&(!start||!end)){alert('เลือกวันที่เริ่มต้นและวันที่สิ้นสุดก่อน');return;}
-  if(!period){alert('เลือกเดือนหรือปีก่อน');return;}
+  if(range&&(!start||!end)){appAlert('เลือกวันที่เริ่มต้นและวันที่สิ้นสุดก่อน');return;}
+  if(!period){appAlert('เลือกเดือนหรือปีก่อน');return;}
   resetCleanupPreview();cleanupBusy=true;
   $w('cleanupPreview').textContent='กำลังตรวจข้อมูลล่าสุดใน Supabase…';
   try {
@@ -101,7 +101,7 @@ async function deleteCleanupPeriod() {
   updateCleanupConfirmation();if($w('cleanupDelete').disabled)return;
   const plan=cleanupPlan;
   if(cleanupSelection()!==plan.period){resetCleanupPreview();return;}
-  if(!confirm(`ลบข้อมูล ${plan.period} ทุกสาขา กระทบ ${cleanupAffected(plan).length} แถวจัดเก็บจาก Supabase?\n${plan.range?'ลบยอดนับทุกวันในช่วง รวมวันสิ้นสุด':`เก็บยอดนับ ${plan.end} ไว้`} · เก็บสูตร BOM\nข้อมูลที่กรอกแต่ยังไม่บันทึกในหน้านี้จะถูกยกเลิก`))return;
+  if(!await appConfirm(`ลบข้อมูล ${plan.period} ทุกสาขา กระทบ ${cleanupAffected(plan).length} แถวจัดเก็บจาก Supabase?\n${plan.range?'ลบยอดนับทุกวันในช่วง รวมวันสิ้นสุด':`เก็บยอดนับ ${plan.end} ไว้`} · เก็บสูตร BOM\nข้อมูลที่กรอกแต่ยังไม่บันทึกในหน้านี้จะถูกยกเลิก`))return;
   cleanupBusy=true;updateCleanupConfirmation();
   let committed=false;
   try {

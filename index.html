@@ -9,6 +9,21 @@
     [hidden] { display: none !important; }
     body:not(.auth-locked) #cloudLoginPanel { display: none; }
     body.auth-locked section.tab-content { display: none !important; }
+    body.auth-locked { display:flex;flex-direction:column;min-height:100vh;min-height:100dvh; }
+    body.auth-locked #mainModuleTabs,
+    body.auth-locked #workflowStorage,
+    body.auth-locked #cloudActions { display:none !important; }
+    body.auth-locked > header { position:relative;flex-shrink:0; }
+    body.auth-locked > main { flex:1;display:flex;align-items:center;justify-content:center;width:100%;max-width:none;margin:0;padding:32px 20px;box-sizing:border-box; }
+    body.auth-locked #cloudLoginPanel { width:100%;max-width:440px;margin:0;padding:32px;border:1px solid #e2e8f0;border-radius:20px;box-shadow:0 10px 35px #0f172a08;box-sizing:border-box; }
+    #cloudLoginPanel > strong { display:block;text-align:center;font-size:24px; }
+    #cloudLoginPanel #cloudMessage { text-align:center;color:#64748b; }
+    #cloudLoginPanel #cloudGate { color:#64748b;font-size:13px;line-height:1.7; }
+    #cloudLoginPanel #cloudLogin { width:100%;max-width:none; }
+    #cloudLoginPanel input { border-radius:10px;min-height:46px; }
+    #cloudLoginPanel #cloudSignInButton { width:100%;border-radius:10px;min-height:46px;font-weight:600; }
+    @media(max-width:480px){body.auth-locked #cloudLoginPanel{padding:24px;}body.auth-locked > main{padding:24px 16px;}}
+
     .stock-in { color:#059669; }
     .stock-out { color:#e11d48; }
     .stock-bom { color:#4f46e5; font-weight:600; }
@@ -42,6 +57,7 @@
       opacity: 1;
     }
   </style>
+  <script src="app-dialog.js?v=20261023"></script>
 </head>
 <body class="auth-locked bg-[var(--background,#f8fafc)] text-[var(--foreground,#0f172a)] antialiased font-sans min-h-screen">
 
@@ -78,7 +94,7 @@
       </div>
 
       <!-- MAIN MODULE TABS -->
-      <div class="flex space-x-1 sm:space-x-4 border-t border-[var(--border,#f1f5f9)] overflow-x-auto py-2">
+      <div id="mainModuleTabs" class="flex space-x-1 sm:space-x-4 border-t border-[var(--border,#f1f5f9)] overflow-x-auto py-2">
         <button onclick="switchTab('tab-bom')" id="nav-tab-bom" class="tab-btn active flex items-center gap-2 px-3 py-2 text-xs sm:text-sm font-semibold rounded-lg transition-all text-emerald-700 bg-emerald-50 border border-emerald-200">
           <span>📋</span> 1. สูตร BOM & Master Data
         </button>
@@ -119,6 +135,19 @@
       <div class="bg-white p-5 rounded-2xl border border-slate-200 space-y-3">
         <h2 class="font-bold">วัตถุดิบสำคัญที่ต้องตรวจนับและติดตามผลต่าง</h2>
         <p class="text-sm text-slate-600">ใช้งานประจำวัน: อัปโหลดไฟล์ในหน้า 2 แล้วกรอกยอดตรวจนับในหน้า 3 ระบบคำนวณยอดรับเข้าและจ่ายออกจากไฟล์ให้เอง</p>
+        <div id="criticalLayoutPanel" hidden class="border rounded-xl p-3">
+          <details id="criticalLayoutEditor" ontoggle="openCriticalLayout()">
+            <summary class="cursor-pointer font-semibold">เลือกวัตถุดิบและจัดลำดับสำหรับทั้ง 4 หน้า</summary>
+            <p class="text-sm text-slate-500 my-3">ใช้ร่วมกันทุกสาขา: คีย์ยอดคงเหลือ · ผลต่าง · ตรวจสต็อกก่อนปิดร้าน · สต็อกคงเหลือแต่ละสาขา การเอาออกไม่ลบยอดเก่าหรือสูตร BOM</p>
+            <input id="criticalLayoutSearch" type="search" placeholder="ค้นหาชื่อหรือรหัสวัตถุดิบที่จะเพิ่ม" oninput="renderCriticalLayout()" class="border rounded-lg p-2">
+            <select id="criticalLayoutAdd" onchange="addCriticalLayout()" class="border rounded-lg p-2"></select>
+            <p class="text-xs text-slate-500">หากยังไม่มีวัตถุดิบในตัวเลือก ให้กำหนดหน่วยในส่วนตั้งค่าวัตถุดิบด้านล่างก่อน</p>
+            <div id="criticalLayoutRows" style="max-height:420px;overflow:auto;margin:12px 0"></div>
+            <button id="criticalLayoutSave" type="button" onclick="saveCriticalLayout()" class="bg-emerald-600 text-white rounded-lg px-4 py-2">บันทึกรายการและลำดับ</button>
+          </details>
+          <p id="criticalLayoutStatus" role="status" class="text-sm text-slate-500"></p>
+        </div>
+        <style>.critical-layout-row{display:flex;gap:8px;align-items:center;border-bottom:1px solid #e2e8f0;padding:8px}.critical-layout-row span{flex:1}.critical-layout-row small{display:block;color:#64748b}.critical-layout-row button{padding:5px 10px;border:1px solid #e2e8f0;border-radius:8px}.critical-layout-row button:disabled{opacity:.3}</style>
         <details class="border rounded-xl p-3">
         <summary class="cursor-pointer text-sm font-semibold text-slate-600">ตั้งค่าวัตถุดิบที่ติดตาม / หน่วยในไฟล์</summary>
         <p class="text-xs text-slate-600 my-3">ตั้งครั้งแรก หรือเมื่อหน่วยในไฟล์เปลี่ยนเท่านั้น ไม่ต้องกรอกยอดรับเข้า–จ่ายออกที่นี่ รายการเดิมใช้การตั้งค่าที่บันทึกไว้ได้เลย</p>
@@ -181,6 +210,7 @@
             <div>
               <div class="flex items-center gap-2">
                 <h3 id="currentRecipeName" class="text-base font-bold text-[var(--foreground,#0f172a)]">ชื่อเมนู</h3>
+                <button id="deleteMenuButton" type="button" onclick="deleteSelectedMenu()" class="text-xs text-rose-600 border border-rose-200 rounded-lg px-3 py-2 hover:bg-rose-50 disabled:opacity-40">ลบเมนูนี้</button>
                 <span id="currentRecipeCode" class="text-xs bg-slate-100 text-slate-700 font-mono px-2 py-0.5 rounded">CODE</span>
               </div>
               <p class="text-xs text-[var(--muted-foreground,#64748b)] mt-0.5">สูตรอาหารมาตรฐาน Version 1.0 (สูตรที่เปิดใช้งาน)</p>
@@ -231,9 +261,12 @@
                 <label class="block text-xs font-bold text-slate-700">
                   1. เมนูนี้ ใช้วัตถุดิบสำคัญ: <span class="text-rose-500">*</span>
                 </label>
-                <select id="ingredientSelectInput" onchange="handleIngredientSelectChange(this.value)" class="w-full bg-white border border-slate-300 rounded-xl p-2.5 text-xs font-semibold text-slate-800 outline-none focus:ring-2 focus:ring-emerald-500 shadow-2xs">
-                  <!-- Populated dynamically by JS -->
-                </select>
+                <div id="ingredientPicker" style="position:relative">
+                  <input id="ingredientSelectInput" type="hidden">
+                  <input id="ingredientSearchInput" type="text" role="combobox" aria-label="เลือกหรือค้นหาวัตถุดิบ" aria-autocomplete="list" aria-controls="ingredientOptions" aria-expanded="false" autocomplete="off" placeholder="เลือกหรือพิมพ์ค้นหาวัตถุดิบ" onfocus="this.select();showIngredientOptions('')" oninput="document.getElementById('ingredientSelectInput').value='';handleIngredientSelectChange('');showIngredientOptions(this.value)" onkeydown="ingredientPickerKey(event)" class="w-full bg-white border border-slate-300 rounded-xl p-2.5 pr-8 text-xs font-semibold text-slate-800 outline-none focus:ring-2 focus:ring-emerald-500">
+                  <button type="button" aria-label="แสดงรายการวัตถุดิบ" onclick="document.getElementById('ingredientSearchInput').focus();showIngredientOptions('')" style="position:absolute;right:8px;top:8px">▾</button>
+                  <div id="ingredientOptions" role="listbox" hidden style="position:absolute;top:100%;left:0;right:0;max-height:280px;overflow-y:auto;z-index:50;background:white;border:1px solid #cbd5e1;border-radius:8px;box-shadow:0 6px 18px #0002"></div>
+                </div>
                 <button type="button" onclick="openSelectedMaterialEditor()" class="text-xs font-semibold text-indigo-700 hover:underline py-1">✏️ แก้ไขวัตถุดิบที่เลือก</button>
               </div>
 
@@ -649,13 +682,13 @@
       </style>
       <div class="bg-white rounded-2xl border p-5 space-y-3">
         <h2 class="text-lg font-bold">ตรวจสต็อกก่อนปิดวัน</h2>
-        <p class="text-sm text-slate-600">1. เลือกวัน → 2. อัปโหลดไฟล์ของสาขา → 3. ตรวจยอดขาด/เกิน → 4. นำยอดนับไปบันทึกในหน้า 3</p>
+        <p class="text-sm text-slate-600">1. เลือกวัน → 2. อัปโหลดไฟล์ของสาขา → 3. ตรวจยอดขาด/เกิน → 4. บันทึกยอดนับจริงจากหน้านี้</p>
         <p class="text-sm text-slate-600">ไฟล์ที่สาขาอัปโหลดจะรวมทุกรายการของสาขาที่เลือก โดยใช้วันที่บนหน้าจอ ไม่ตรวจวันที่ในไฟล์ หากไฟล์มีหลายวัน ยอดทั้งหมดจะรวมเป็นวันที่เลือก</p>
-        <p class="rounded-lg bg-amber-50 p-3 text-sm">หน้านี้ใช้ทดลองตรวจในเครื่อง ยังไม่บันทึกลงส่วนกลาง เปลี่ยนสาขา/วันที่ รีเฟรช หรือออกจากระบบจะล้างข้อมูลทดลอง ใช้เฉพาะไฟล์ที่สาขาอัปโหลด ไม่ดึงยอดขาย รับเข้า หรือจ่ายออกจาก Admin เมื่อเช็คเสร็จให้นำยอดไปบันทึกในหน้า 3</p>
+        <p class="rounded-lg bg-amber-50 p-3 text-sm">กด “บันทึกยอดนับจริง” เพื่อบันทึกยอดนับและของสูญเสียลงระบบได้ทันที ไฟล์อัปโหลดและยอดยกมาที่ทดลองแก้ใช้เฉพาะการตรวจในหน้านี้ และจะล้างเมื่อเปลี่ยนสาขา/วันที่ รีเฟรช หรือออกจากระบบ ไม่ดึงไฟล์จาก Admin</p>
         <div class="bc-controls">
           <label>สาขา<select id="branchCheckBranch" onchange="renderBranchCheck()"></select></label>
           <label>วันที่ตรวจ<input id="branchCheckDate" type="date" onchange="renderBranchCheck()"></label>
-          <button onclick="exportBranchCheck()" class="bg-emerald-600 text-white rounded-lg p-2">ส่งออกผลตรวจ Excel</button>
+          <button onclick="exportBranchCheck()" class="bg-slate-800 hover:bg-slate-900 text-white px-3.5 py-2 rounded-xl text-xs font-semibold shadow-xs flex items-center gap-1.5 transition-colors">📑 ส่งออกผลตรวจ Excel</button>
         </div>
         <p class="text-sm text-slate-600">ไฟล์ยอดขายสรุปที่ไม่มีรหัสสาขา ใช้สาขาที่เลือกด้านบนอัตโนมัติ อ่านจำนวนขายจากคอลัมน์ Number ไม่ต้องแก้ไฟล์ Excel</p>
         <details><summary class="cursor-pointer text-sm text-slate-600">ไฟล์ประเภทอื่นไม่มีรหัสสาขา หรือไฟล์ระบุสาขาไม่ครบทุกแถว</summary>
@@ -689,7 +722,8 @@
         <p class="text-xs text-slate-600">ยอดยกมาใช้ยอดนับวันก่อนจากหน้า 3 หากเคยบันทึกยอดนับวันนี้ไว้จะแสดงให้ตรวจแก้ได้ สูตร BOM และหน่วยใช้ชุดเดียวกับระบบ แก้เพื่อทดลองได้ ช่องว่างคือยังไม่ทราบยอด ส่วน 0 คือไม่มีของ สูญเสียเว้นว่างถือว่า 0 หน่วยในตารางผลลัพธ์ใช้หน่วยฐานของ BOM</p>
         <p id="branchCheckSummary" role="status" class="font-semibold"></p>
         <div style="overflow-x:auto"><table class="bc-results"><colgroup><col style="width:24%"><col style="width:14%"><col style="width:6%"><col style="width:6%"><col style="width:8%"><col style="width:12%"><col style="width:8%"><col style="width:14%"><col style="width:8%"></colgroup><thead><tr><th>วัตถุดิบ</th><th>ยกมา<small id="branchOpeningDate"></small></th><th>itec in + เครื่องดื่ม in</th><th>itec out</th><th>ใช้ตาม BOM</th><th>สูญเสีย</th><th>ควรเหลือ</th><th>นับจริง</th><th>ผลต่าง</th></tr></thead><tbody id="branchCheckBody"></tbody></table></div>
-        <button onclick="transferBranchCheckCounts()" class="bg-emerald-600 text-white rounded-lg p-3">นำยอดนับไปหน้า 3</button>
+        <button id="branchSaveCounts" onclick="saveBranchCheckCounts()" class="bg-emerald-600 text-white rounded-lg p-3 disabled:opacity-40">บันทึกยอดนับจริง</button>
+        <p id="branchSaveStatus" role="status" class="text-sm text-emerald-700"></p>
       </div>
     </section>
     <section id="tab-stock-overview" class="tab-content hidden space-y-5">
@@ -698,13 +732,32 @@
         <p class="text-sm text-slate-600">ยอดนับจริงที่บันทึกในหน้า 3 ไม่รวมฉบับร่าง หากวันที่เลือกยังไม่บันทึก จะแสดงยอดบันทึกล่าสุดก่อนวันนั้น พร้อมระบุวันที่บนหัวคอลัมน์ ยอด 0 หมายถึงบันทึกแล้วว่าไม่มีของ</p>
         <div class="flex flex-wrap gap-4 items-end">
           <label>วันที่ดูยอด<input id="stockOverviewDate" type="date" onchange="renderStockOverview()" class="block border rounded-lg p-2"></label>
-          <label>สาขา<select id="stockOverviewBranch" onchange="renderStockOverview()" class="block border rounded-lg p-2"><option value="ALL">ทุกสาขา</option></select></label>
+          <label>สาขา<select id="stockOverviewBranch" onchange="stockOverviewLayoutChanged()" class="block border rounded-lg p-2"><option value="ALL">ทุกสาขา (เรียงตามรหัส)</option><option value="CUSTOM">เลือกสาขาและจัดลำดับเอง</option></select></label>
           <label>ค้นหาวัตถุดิบ<input id="stockOverviewSearch" type="search" oninput="renderStockOverview()" placeholder="ชื่อหรือรหัสวัตถุดิบ" class="block border rounded-lg p-2"></label>
+          <button type="button" onclick="exportStockOverview()" class="bg-slate-800 hover:bg-slate-900 text-white px-3.5 py-2 rounded-xl text-xs font-semibold shadow-xs flex items-center gap-1.5 transition-colors">📑 ส่งออก Excel</button>
         </div>
+        <div class="stock-layout-panel">
+          <details id="stockOverviewLayoutEditor" open><summary class="cursor-pointer font-semibold">เลือกสาขา / แก้ไขลำดับ</summary>
+          <div id="stockOverviewCustomBranches" hidden>
+            <label for="stockOverviewAddBranch">เพิ่มสาขา (เลือกก่อน แสดงก่อน)</label>
+            <select id="stockOverviewAddBranch" onchange="addStockOverviewBranch()" class="border rounded-lg p-2"></select>
+            <div id="stockOverviewBranchList" class="stock-layout-list"></div>
+          </div>
+          <button id="stockOverviewSaveLayout" type="button" onclick="saveStockOverviewLayout()" class="border rounded-lg px-3 py-2 text-sm">บันทึกรูปแบบนี้</button>
+          </details>
+          <span id="stockOverviewLayoutStatus" role="status" class="text-sm text-slate-500"></span>
+          <p class="text-xs text-slate-500">บันทึกกับบัญชี ใช้ได้ทุกเบราว์เซอร์เมื่อเข้าสู่ระบบด้วยบัญชีเดียวกัน ทั้งตารางและ Excel ใช้ลำดับเดียวกัน</p>
+        </div>
+        <p class="text-xs text-slate-500">ส่งออก Excel เฉพาะยอดที่บันทึกตรงวันที่เลือก ไม่ใช้ยอดย้อนหลังแทน ช่องที่ยังไม่บันทึกจะเว้นว่าง</p>
         <p id="stockOverviewSummary" role="status" class="text-sm text-slate-600"></p>
-        <div style="overflow-x:auto"><table class="stock-overview-table"><thead id="stockOverviewHead"></thead><tbody id="stockOverviewBody"></tbody></table></div>
+        <div id="stockOverviewScroll" style="overflow-x:auto" onscroll="syncStockOverviewScroll()"><table class="stock-overview-table"><thead id="stockOverviewHead"></thead><tbody id="stockOverviewBody"></tbody></table></div>
+        <div id="stockOverviewScrollControls" class="stock-overview-scroll-controls" hidden>
+          <button type="button" id="stockOverviewScrollLeft" onclick="moveStockOverviewScroll(-1)" aria-label="เลื่อนดูสาขาทางซ้าย">←</button>
+          <input id="stockOverviewScrollRange" type="range" min="0" max="0" value="0" step="1" aria-label="เลื่อนตารางดูสาขาซ้าย–ขวา" oninput="setStockOverviewScroll(this.value)">
+          <button type="button" id="stockOverviewScrollRight" onclick="moveStockOverviewScroll(1)" aria-label="เลื่อนดูสาขาทางขวา">→</button>
+        </div>
       </div>
-      <style>.stock-overview-table{width:100%;border-collapse:separate;border-spacing:0;font-size:13px}.stock-overview-table th,.stock-overview-table td{padding:10px;border-bottom:1px solid #dbe3ee;border-right:1px solid #dbe3ee;min-width:150px}.stock-overview-table th{background:#eef2f7}.stock-overview-table th:first-child,.stock-overview-table td:first-child{position:sticky;left:0;min-width:240px;background:#f8fafc}.stock-overview-table td{text-align:right}.stock-overview-table td:first-child{text-align:left}.stock-overview-table small{display:block;color:#64748b}.stock-overview-table .pending{color:#94a3b8;font-size:12px}</style>
+      <style>.stock-layout-panel{padding:12px;border:1px solid #e5e7eb;border-radius:12px}.stock-layout-list{display:flex;flex-wrap:wrap;gap:8px;margin:12px 0;max-height:260px;overflow:auto}.stock-layout-row{display:flex;align-items:center;gap:6px;border:1px solid #e5e7eb;border-radius:10px;padding:8px;background:#f8fafc}.stock-layout-row button{padding:2px 8px;border:1px solid #e5e7eb;border-radius:6px;background:white}.stock-layout-row button:disabled{opacity:.3}.stock-overview-scroll-controls{position:sticky;bottom:12px;z-index:20;display:flex;align-items:center;gap:14px;padding:12px 16px;margin-top:12px;background:#fff;border:1px solid #e5e7eb;border-radius:14px;box-shadow:0 2px 8px #0000000a}.stock-overview-scroll-controls[hidden]{display:none}.stock-overview-scroll-controls input{flex:1;min-width:0;accent-color:#6b7280;cursor:pointer}.stock-overview-scroll-controls button{pointer-events:auto;display:flex;align-items:center;justify-content:center;width:42px;height:42px;border:1px solid #e5e7eb;border-radius:12px;background:#fff;color:#4b5563;font-family:Arial,sans-serif;font-size:24px;box-shadow:0 2px 8px #0000000a;cursor:pointer}.stock-overview-scroll-controls button:hover:not(:disabled){background:#f3f4f6;color:#111827}.stock-overview-scroll-controls button:focus-visible{outline:2px solid #9ca3af;outline-offset:2px}.stock-overview-scroll-controls button:disabled{color:#d1d5db;cursor:default}.stock-overview-table{width:100%;border-collapse:separate;border-spacing:0;font-size:13px}.stock-overview-table th,.stock-overview-table td{padding:10px;border-bottom:1px solid #dbe3ee;border-right:1px solid #dbe3ee;min-width:150px}.stock-overview-table th{background:#eef2f7}.stock-overview-table th:first-child,.stock-overview-table td:first-child{position:sticky;left:0;min-width:240px;background:#f8fafc}.stock-overview-table td{text-align:right}.stock-overview-table td:first-child{text-align:left;font-weight:700}.stock-overview-table td:first-child small{font-weight:400}.stock-overview-table small{display:block;color:#64748b}.stock-overview-table .pending{color:#94a3b8;font-size:12px}</style>
     </section>
     <section id="tab-restore" class="tab-content hidden space-y-5">
       <div class="bg-white border border-slate-200 rounded-2xl p-6 space-y-4">
@@ -1060,6 +1113,16 @@
       container.scrollTop=previousScroll;
       // Render Selected Recipe Details
       const selected = appState.recipes.find(r => r.menuId === appState.selectedMenuId) || appState.recipes[0];
+      document.getElementById('deleteMenuButton').disabled=!selected;
+      if(!selected){
+        appState.selectedMenuId=null;
+        document.getElementById('currentRecipeName').textContent='ยังไม่มีเมนู กรุณาเพิ่มเมนูขาย';
+        document.getElementById('currentRecipeCode').textContent='';
+        document.getElementById('recipeItemsTableBody').innerHTML='';
+        document.getElementById('addFormMenuNameDisplay').textContent='ยังไม่มีเมนู';
+        return;
+      }
+      appState.selectedMenuId=selected.menuId;
       document.getElementById('currentRecipeName').textContent = selected.menuName;
       document.getElementById('currentRecipeCode').textContent = selected.menuCode;
 
@@ -1101,31 +1164,49 @@
         tbody.appendChild(tr);
       });
 
-      // Populate Ingredient Select Dropdown
-      const selectEl = document.getElementById('ingredientSelectInput');
-      if (selectEl) {
-        const currentSelectedVal = selectEl.value;
-        selectEl.innerHTML = '';
-        appState.materials.forEach(mat => {
-          const opt = document.createElement('option');
-          opt.value = mat.id;
-          opt.textContent = `${mat.name} (${mat.code}) — หน่วย ${mat.baseUnit}`;
-          selectEl.appendChild(opt);
-        });
-
-        if (currentSelectedVal && appState.materials.some(m => m.id === currentSelectedVal)) {
-          selectEl.value = currentSelectedVal;
-        } else if (appState.materials.length > 0) {
-          selectEl.value = appState.materials[0].id;
-        }
-        handleIngredientSelectChange(selectEl.value);
-      }
+      filterIngredientOptions();
     }
+
+    function ingredientLabel(mat){return `${mat.name} (${mat.code}) — หน่วย ${mat.baseUnit}`;}
+    function closeIngredientOptions(){document.getElementById('ingredientOptions').hidden=true;document.getElementById('ingredientSearchInput').setAttribute('aria-expanded','false');}
+    function filterIngredientOptions(){
+      const selected=document.getElementById('ingredientSelectInput');
+      const mat=appState.materials.find(m=>m.id===selected.value);
+      if(!mat)selected.value='';
+      document.getElementById('ingredientSearchInput').value=mat?ingredientLabel(mat):'';
+      closeIngredientOptions();handleIngredientSelectChange(selected.value);
+    }
+    function showIngredientOptions(query){
+      const list=document.getElementById('ingredientOptions');list.innerHTML='';
+      const matches=appState.materials.filter(m=>(m.name+' '+m.code+' '+m.baseUnit).toLocaleLowerCase().includes(query.trim().toLocaleLowerCase()));
+      for(const mat of matches){
+        const option=document.createElement('button');option.type='button';option.setAttribute('role','option');
+        option.setAttribute('aria-selected',String(mat.id===document.getElementById('ingredientSelectInput').value));
+        option.textContent=ingredientLabel(mat);option.className='block w-full text-left p-3 text-xs hover:bg-emerald-50 focus:bg-emerald-50';
+        option.onclick=()=>{document.getElementById('ingredientSelectInput').value=mat.id;document.getElementById('ingredientSearchInput').value=ingredientLabel(mat);handleIngredientSelectChange(mat.id);document.getElementById('ingredientSearchInput').focus();closeIngredientOptions();};
+        option.onkeydown=ingredientPickerKey;list.appendChild(option);
+      }
+      if(!matches.length){const empty=document.createElement('div');empty.textContent='ไม่พบวัตถุดิบ';empty.className='p-3 text-xs text-slate-500';list.appendChild(empty);}
+      list.hidden=false;document.getElementById('ingredientSearchInput').setAttribute('aria-expanded','true');
+    }
+    function ingredientPickerKey(event){
+      const list=document.getElementById('ingredientOptions'),input=document.getElementById('ingredientSearchInput');
+      if(event.key==='Escape'){event.preventDefault();input.focus();closeIngredientOptions();return;}
+      if(event.key==='ArrowDown'||event.key==='ArrowUp'){
+        event.preventDefault();if(list.hidden)showIngredientOptions(input.value);
+        const options=Array.from(list.querySelectorAll('button'));if(!options.length)return;
+        const current=options.indexOf(document.activeElement),step=event.key==='ArrowDown'?1:-1;
+        options[(current+step+options.length)%options.length].focus();
+      }
+      if(event.key==='Enter'&&event.target===input&&!list.hidden){event.preventDefault();list.querySelector('button')?.click();}
+    }
+    document.addEventListener('click',event=>{if(!document.getElementById('ingredientPicker')?.contains(event.target))closeIngredientOptions();});
+    document.addEventListener('focusin',event=>{if(!document.getElementById('ingredientPicker')?.contains(event.target))closeIngredientOptions();});
 
     // เมื่อเปลี่ยนเลือกวัตถุดิบในฟอร์มเพิ่มรายการ
     function handleIngredientSelectChange(materialId) {
       const mat = appState.materials.find(m => m.id === materialId);
-      if (!mat) return;
+      if (!mat) {document.getElementById('ingredientUnitBadge').textContent='เลือกวัตถุดิบ';updateAddEstimate();return;}
       const unitBadge = document.getElementById('ingredientUnitBadge');
       if (unitBadge) unitBadge.textContent = `${mat.baseUnit}`;
       updateAddEstimate();
@@ -1151,7 +1232,7 @@
     }
 
     // บันทึกเพิ่มวัตถุดิบเข้าสู่สูตรของเมนูนี้
-    function addIngredientToCurrentRecipe() {
+    async function addIngredientToCurrentRecipe() {
       const recipe = appState.recipes.find(r => r.menuId === appState.selectedMenuId);
       if (!recipe) return;
 
@@ -1160,11 +1241,11 @@
       const yieldRate = parseFloat(document.getElementById('ingredientYieldInput')?.value) || 100;
 
       if (!matId) {
-        alert('กรุณาเลือกวัตถุดิบ');
+        appAlert('กรุณาเลือกวัตถุดิบ');
         return;
       }
       if (!qty || qty <= 0) {
-        alert('กรุณากรอกจำนวนปริมาณสุทธิที่ต้องการใช้ (ต้องมากกว่า 0)');
+        appAlert('กรุณากรอกจำนวนปริมาณสุทธิที่ต้องการใช้ (ต้องมากกว่า 0)');
         document.getElementById('ingredientQtyInput')?.focus();
         return;
       }
@@ -1174,7 +1255,7 @@
       // ตรวจสอบว่ามีวัตถุดิบนี้ในสูตรอยู่แล้วหรือไม่
       const existingIdx = recipe.items.findIndex(it => it.materialId === matId);
       if (existingIdx >= 0) {
-        const confirmUpdate = confirm(`วัตถุดิบ "${mat.name}" มีอยู่ในสูตรนี้แล้ว ต้องการอัปเดตปริมาณเป็น ${qty} ${mat.baseUnit} (Yield ${yieldRate}%) หรือไม่?`);
+        const confirmUpdate = await appConfirm(`วัตถุดิบ "${mat.name}" มีอยู่ในสูตรนี้แล้ว ต้องการอัปเดตปริมาณเป็น ${qty} ${mat.baseUnit} (Yield ${yieldRate}%) หรือไม่?`);
         if (confirmUpdate) {
           recipe.items[existingIdx].netQty = qty;
           recipe.items[existingIdx].yieldRate = yieldRate;
@@ -1196,16 +1277,36 @@
 
       // เรนเดอร์อัปเดตตารางและต้นทุนใหม่ทันที
       renderBomModule();
-      alert(`เพิ่ม "${mat.name}" จำนวน ${qty} ${mat.baseUnit} ลงในสูตรเมนู "${recipe.menuName}" เรียบร้อยแล้ว! ปริมาณใช้ตามสูตรอัปเดตแล้ว`);
+      appAlert(`เพิ่ม "${mat.name}" จำนวน ${qty} ${mat.baseUnit} ลงในสูตรเมนู "${recipe.menuName}" เรียบร้อยแล้ว! ปริมาณใช้ตามสูตรอัปเดตแล้ว`);
     }
 
     // ลบวัตถุดิบออกจากสูตร
-    function deleteIngredientFromRecipe(materialId) {
+    let deletingMenu=false;
+    async function deleteSelectedMenu() {
+      if(deletingMenu)return;
+      if(!workflowReady || (typeof BOM_SUPABASE!=='undefined' && !['admin','branch'].includes(bomCloud.member?.role))){appAlert('กรุณาเข้าสู่ระบบและรอโหลดข้อมูลก่อน');return;}
+      const recipe=appState.recipes.find(r=>r.menuId===appState.selectedMenuId);
+      if(!recipe)return;
+      if(!await appConfirm(`ลบเมนู "${recipe.menuName}" (${recipe.menuCode}) และสูตรของเมนูนี้หรือไม่?\nเป็นสูตรกลางที่ทุกสาขาใช้ และมีผลต่อการคำนวณรายงานที่ใช้สูตรปัจจุบัน\nวัตถุดิบและข้อมูลยอดขายเดิมยังคงอยู่`))return;
+      deletingMenu=true;
+      const previous=appState.recipes.slice(),selectedId=appState.selectedMenuId;
+      document.getElementById('deleteMenuButton').disabled=true;
+      try {
+        appState.recipes=appState.recipes.filter(r=>r.menuId!==selectedId);
+        await storeWorkflow();
+        appState.selectedMenuId=appState.recipes[0]?.menuId||null;
+      }catch(error){
+        appState.recipes=previous;appState.selectedMenuId=selectedId;
+        appAlert('ลบเมนูไม่สำเร็จ: '+error.message);
+      }finally{deletingMenu=false;renderBomModule();}
+    }
+
+    async function deleteIngredientFromRecipe(materialId) {
       const recipe = appState.recipes.find(r => r.menuId === appState.selectedMenuId);
       if (!recipe) return;
 
       const mat = appState.materials.find(m => m.id === materialId);
-      const confirmDelete = confirm(`คุณต้องการลบวัตถุดิบ "${mat?.name || materialId}" ออกจากสูตรของเมนูนี้ใช่หรือไม่?`);
+      const confirmDelete = await appConfirm(`คุณต้องการลบวัตถุดิบ "${mat?.name || materialId}" ออกจากสูตรของเมนูนี้ใช่หรือไม่?`);
       if (!confirmDelete) return;
 
       recipe.items = recipe.items.filter(it => it.materialId !== materialId);
@@ -1334,12 +1435,12 @@
     }
 
     function commitImportData() {
-      alert(`นำเข้าข้อมูลเรียบร้อยแล้ว (${currentPreviewData.length} แถว) ข้อมูลถูกประมวลผลเข้าสู่คลังสินค้าเรียบร้อย`);
+      appAlert(`นำเข้าข้อมูลเรียบร้อยแล้ว (${currentPreviewData.length} แถว) ข้อมูลถูกประมวลผลเข้าสู่คลังสินค้าเรียบร้อย`);
       switchTab('tab-variance');
     }
 
     function downloadSampleTemplate() {
-      alert('เริ่มดาวน์โหลดไฟล์ Template Excel สำหรับระบบ BOM & Inventory เรียบร้อย');
+      appAlert('เริ่มดาวน์โหลดไฟล์ Template Excel สำหรับระบบ BOM & Inventory เรียบร้อย');
     }
 
     // 5. MODULE 3: DAILY PHYSICAL STOCK COUNT
@@ -1409,7 +1510,7 @@
     function savePhysicalStockCount() {
       const branch = appState.countBranch;
       const date = appState.countDate;
-      if (!date) { alert('กรุณาเลือกวันที่ตรวจนับ'); return; }
+      if (!date) { appAlert('กรุณาเลือกวันที่ตรวจนับ'); return; }
       const data = appState.branchData[branch];
       const record = data.dailyHistory[date] || { sales: [], stocks: {} };
       const inputs = getCountDraft();
@@ -1437,7 +1538,7 @@
       appState.varianceFilter.dailyDate = date;
       setVariancePeriodMode('daily');
       switchTab('tab-variance');
-      alert('บันทึกยอดตรวจนับของ ' + branch + ' วันที่ ' + date + ' แล้ว (ข้อมูลอยู่ในหน้านี้จนกว่าจะรีเฟรช)');
+      appAlert('บันทึกยอดตรวจนับของ ' + branch + ' วันที่ ' + date + ' แล้ว (ข้อมูลอยู่ในหน้านี้จนกว่าจะรีเฟรช)');
     }
 
     // 6. MODULE 4: MULTI-PERIOD VARIANCE ENGINE (รายวัน, รายเดือน, กำหนดช่วงวัน)
@@ -1895,7 +1996,7 @@
     function exportVarianceReport() {
       const mode = appState.varianceFilter.periodMode;
       const label = document.getElementById('activePeriodLabel').textContent;
-      alert(`ส่งออกข้อมูลเรียบร้อยแล้ว: [${label}] ระบบได้ดาวน์โหลดข้อมูลสรุปผลต่างและแจกแจงรายวันเป็นไฟล์ CSV เรียบร้อย`);
+      appAlert(`ส่งออกข้อมูลเรียบร้อยแล้ว: [${label}] ระบบได้ดาวน์โหลดข้อมูลสรุปผลต่างและแจกแจงรายวันเป็นไฟล์ CSV เรียบร้อย`);
     }
 
     // MODAL FUNCTIONS FOR RECIPES & MASTER DATA
@@ -1920,15 +2021,15 @@
       const price = parseFloat(document.getElementById('newMenuPriceInput').value);
 
       if (!code || !name) {
-        alert('กรุณากรอกรหัสเมนูและชื่อเมนู');
+        appAlert('กรุณากรอกรหัสเมนูและชื่อเมนู');
         return;
       }
       if (isNaN(price) || price < 0) {
-        alert('กรุณากรอกราคาขายที่ถูกต้อง');
+        appAlert('กรุณากรอกราคาขายที่ถูกต้อง');
         return;
       }
 
-      if (appState.recipes.some(r => r.menuCode === code)) { alert('รหัสเมนูนี้มีอยู่แล้ว กรุณาเลือกแก้สูตรเดิม'); return; }
+      if (appState.recipes.some(r => r.menuCode === code)) { appAlert('รหัสเมนูนี้มีอยู่แล้ว กรุณาเลือกแก้สูตรเดิม'); return; }
       const newId = `mn-${Date.now()}`;
       appState.recipes.push({
         menuId: newId,
@@ -1941,7 +2042,7 @@
       appState.selectedMenuId = newId;
       closeAddRecipeModal();
       renderBomModule();
-      alert(`สร้างเมนูใหม่ "${name} (${code})" สำเร็จ! ตอนนี้คุณสามารถเพิ่มรายการวัตถุดิบลงในสูตรได้ทันที`);
+      appAlert(`สร้างเมนูใหม่ "${name} (${code})" สำเร็จ! ตอนนี้คุณสามารถเพิ่มรายการวัตถุดิบลงในสูตรได้ทันที`);
     }
 
     function openCreateMaterialModal() {
@@ -1978,19 +2079,19 @@
       const cost = parseFloat(document.getElementById('newMatCostInput').value);
 
       if (!code || !name) {
-        alert('กรุณากรอกรหัสวัตถุดิบและชื่อวัตถุดิบ');
+        appAlert('กรุณากรอกรหัสวัตถุดิบและชื่อวัตถุดิบ');
         return;
       }
       if (!baseUnit) {
-        alert('กรุณาเลือกหรือพิมพ์หน่วยวัตถุดิบ');
+        appAlert('กรุณาเลือกหรือพิมพ์หน่วยวัตถุดิบ');
         return;
       }
       if (appState.materials.some(mat => mat.code === code)) {
-        alert('รหัสวัตถุดิบนี้มีอยู่แล้ว กรุณาแก้ไขวัตถุดิบเดิม');
+        appAlert('รหัสวัตถุดิบนี้มีอยู่แล้ว กรุณาแก้ไขวัตถุดิบเดิม');
         return;
       }
       if (isNaN(cost) || cost < 0) {
-        alert('กรุณากรอกต้นทุนต่อหน่วยฐาน');
+        appAlert('กรุณากรอกต้นทุนต่อหน่วยฐาน');
         return;
       }
 
@@ -2009,6 +2110,7 @@
       };
 
       appState.materials.push(newMaterial);
+      document.getElementById('ingredientSearchInput').value='';
       closeCreateMaterialModal();
       renderBomModule();
 
@@ -2016,10 +2118,10 @@
       const selectEl = document.getElementById('ingredientSelectInput');
       if (selectEl) {
         selectEl.value = newMatId;
-        handleIngredientSelectChange(newMatId);
+        filterIngredientOptions();
       }
 
-      alert(`บันทึกวัตถุดิบ "${name} (${code})" เข้า Master Data เรียบร้อย! คุณสามารถเลือกใช้ในสูตรเมนูได้ทันที`);
+      appAlert(`บันทึกวัตถุดิบ "${name} (${code})" เข้า Master Data เรียบร้อย! คุณสามารถเลือกใช้ในสูตรเมนูได้ทันที`);
     }
 
     function summarizeMonth(history, month) {
@@ -2144,13 +2246,14 @@
   <script src="vendor/xlsx.full.min.js"></script>
   <script src="ponn-template.js"></script>
   <script src="supabase-config.js"></script>
-  <script src="workflow.js"></script>
-  <script src="count-units.js"></script>
-  <script src="supabase-store.js"></script>
-  <script src="data-cleanup.js"></script>
-  <script src="data-restore.js"></script>
-  <script src="branch-check.js"></script>
-  <script src="stock-overview.js"></script>
+  <script src="workflow.js?v=20261023-dialog"></script>
+  <script src="count-units.js?v=20261025-order"></script>
+  <script src="supabase-store.js?v=20261025-order"></script>
+  <script src="data-cleanup.js?v=20261023-dialog"></script>
+  <script src="data-restore.js?v=20261023-dialog"></script>
+  <script src="branch-check.js?v=20261023-dialog"></script>
+  <script src="stock-overview.js?v=20261023-dialog"></script>
+  <script src="critical-layout.js?v=20261025"></script>
 </body>
 </html>
 

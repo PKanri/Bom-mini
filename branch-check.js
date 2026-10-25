@@ -4,6 +4,7 @@ const branchCheckLabels={SALES:'ยอดขาย',STOCK_IN:'itec in',STOCK_OUT
 let branchCheckState={scope:'',files:{},counts:{},rows:[],generation:0};
 function resetBranchCheck() {
   branchCheckState={scope:'',files:{},counts:{},rows:[],generation:branchCheckState.generation+1};
+  if($w('branchSaveStatus'))$w('branchSaveStatus').textContent='';
   const body=$w('branchCheckBody');if(body)body.innerHTML='';
   if($w('branchCheckSummary'))$w('branchCheckSummary').textContent='';
   if($w('branchCheckSources'))$w('branchCheckSources').innerHTML='';
@@ -159,10 +160,10 @@ function ensureBranchCheckScope(scope) {
     $w('branchCheckMessage').textContent='เลือกไฟล์ใหม่เมื่อเปลี่ยนสาขาหรือวันที่ ข้อมูลทดลองของวันเดิมถูกล้างแล้ว';
   }
 }
-function zeroBranchCheck(type) {
+async function zeroBranchCheck(type) {
   try{
     const scope=branchCheckScope();ensureBranchCheckScope(scope);
-    if(!confirm(`ยืนยันว่าสาขา ${scope.branch} วันที่ ${scope.date} ไม่มีรายการ${branchCheckLabels[type]}?`))return;
+    if(!await appConfirm(`ยืนยันว่าสาขา ${scope.branch} วันที่ ${scope.date} ไม่มีรายการ${branchCheckLabels[type]}?`))return;
     if(branchCheckState.reads)delete branchCheckState.reads[type];
     branchCheckState.files[type]={type,rows:[],file:'ยืนยันไม่มีรายการ'};
     renderBranchCheck();
@@ -170,6 +171,7 @@ function zeroBranchCheck(type) {
 }
 function clearBranchCheckFile(type) {if(branchCheckState.reads)delete branchCheckState.reads[type];delete branchCheckState.files[type];renderBranchCheck();}
 function branchCheckInput(index,field,part,value) {
+  $w('branchSaveStatus').textContent='มีการแก้ไขยอด กรุณาบันทึกอีกครั้ง';
   const [code,s]=orderedCountEntries()[index]||[];
   if(!code)return;
   const entry=branchCheckState.counts[code]||={};
@@ -273,31 +275,40 @@ function exportBranchCheck() {
   calculateBranchCheck();
   if(!branchCheckState.rows.length)return;
   const scope=branchCheckScope(),book=XLSX.utils.book_new();
-  const rows=branchCheckState.rows.map(r=>({วันที่:scope.date,สาขา:scope.branch,รหัส:r.code,วัตถุดิบ:r.name,หน่วย:r.unit,ยกมา:r.opening??'',รับเข้า:r.in,จ่ายออก:r.out,ใช้ตามสูตร:r.bom,สูญเสีย:r.waste,ควรเหลือ:r.theory??'',นับจริง:r.actual??'',ผลต่าง:stockDifference(r).qty??'',สถานะ:r.ready?'ตรวจแล้ว':r.issues.join(' / '),ประเภท:'ทดลองตรวจสิ้นวัน ยังไม่บันทึกส่วนกลาง'}));
+  const rows=branchCheckState.rows.map(r=>({วันที่:scope.date,สาขา:scope.branch,รหัส:r.code,วัตถุดิบ:r.name,หน่วย:r.unit,ยกมา:r.opening??'',รับเข้า:r.in,จ่ายออก:r.out,ใช้ตามสูตร:r.bom,สูญเสีย:r.waste,ควรเหลือ:r.theory??'',นับจริง:r.actual??'',ผลต่าง:stockDifference(r).qty??'',สถานะ:r.ready?'ตรวจแล้ว':r.issues.join(' / '),ประเภท:'ผลตรวจจากไฟล์สาขา (ไฟล์เคลื่อนไหวใช้ตรวจในหน้านี้)'}));
   XLSX.utils.book_append_sheet(book,XLSX.utils.json_to_sheet(rows),'ตรวจสิ้นวัน');
   XLSX.writeFile(book,`ตรวจสิ้นวัน_${scope.branch}_${scope.date}.xlsx`);
 }
 
-function transferBranchCheckCounts() {
+let branchCountSaving=false;
+async function saveBranchCheckCounts() {
+  if(branchCountSaving)return;
+  let key,previous,next,scope,generation;
   try {
-    const scope=branchCheckScope();
-    if(branchCheckState.scope!==scope.key)throw Error('เลือกสาขาและวันที่ แล้วตรวจข้อมูลก่อน');
-    const rows=branchCheckModel(scope);
-    if(!rows.length||rows.some(r=>!r.ready))throw Error('กรุณาเติมข้อมูลให้คำนวณได้ครบทุกรายการก่อนนำยอดไปหน้า 3');
-    const key=countKey(scope.branch,scope.date);
-    if(!confirm(`นำยอดนับ ${rows.length} รายการ ของสาขา ${scope.branch} วันที่ ${scope.date} ไปหน้า 3? ยอดนับในฉบับร่างของวันเดียวกันจะถูกแทนที่ และต้องกดบันทึกในหน้า 3 อีกครั้ง`))return;
-    rememberCountDraft();
-    const next={...(countDrafts[key]||workflow.counts[key]||{})};
-    for(const [code,s]of orderedCountEntries()) {
+    scope=branchCheckScope();generation=branchCheckState.generation;
+    if(branchCheckState.scope!==scope.key)throw Error('เลือกสาขาและวันที่ก่อนบันทึก');
+    key=countKey(scope.branch,scope.date);previous=workflow.counts[key];next=structuredClone(previous||{});
+    const entries=orderedCountEntries();let entered=0;
+    for(const [code,s]of entries){
       const units=countUnits(s,code),draft=branchCheckState.counts[code]||{};
       const values=draft.actual??branchCheckValues(scope,code,s,'actual');
+      const qty=branchCheckQuantity(values,units);
       const waste=branchCheckQuantity(draft.waste??branchCheckValues(scope,code,s,'waste'),[{factor:1}])??0;
-      next[code]={unitInputs:units.map((u,i)=>({...u,value:values[i]??''})),loss:String(waste/units[0].factor),lossUnit:units[0].label,remarks:next[code]?.remarks||''};
+      if(qty==null){if(waste)throw Error('กรอกยอดนับจริงของ '+s.name+' ก่อนบันทึกของสูญเสีย');continue;}
+      entered++;
+      next[code]={...(previous?.[code]||{}),qty,unitInputs:units.map((u,i)=>({...u,value:values[i]??''})),waste,loss:String(waste/units[0].factor),lossUnit:units[0].label,updatedAt:new Date().toISOString()};
+      delete next[code].unitReview;
     }
-    countDrafts[key]=next;
-    $w('stockCountBranchInput').value=scope.branch;
-    $w('stockCountDateInput').value=scope.date;
-    switchTab('tab-count');
-    $w('countSaveStatus').textContent='นำยอดจากหน้าตรวจสต็อกก่อนปิดวันมาแล้ว · '+scope.date+' · ตรวจยอดแล้วกดบันทึกยอดตรวจนับเพื่อยืนยัน';
-  }catch(e){$w('branchCheckSummary').textContent=e.message;}
+    if(!entered)throw Error('กรอกยอดนับจริงอย่างน้อย 1 รายการก่อนบันทึก');
+    const warnings=countAnomalyWarnings(scope.branch,scope.date,next,previous||{},entries);
+    if(!await appConfirm(`บันทึกยอดนับจริง ${entered} รายการ · สาขา ${scope.branch} · วันที่ ${scope.date} หรือไม่?\nบันทึกยอดนับและสูญเสีย ช่องที่ยังไม่กรอกจะคงข้อมูลเดิมไว้ ยอดยกมาและไฟล์อัปโหลดไม่ถูกบันทึก${warnings.length?'\n\nรายการที่ควรตรวจซ้ำ:\n'+warnings.join('\n'):''}`))return;
+    branchCountSaving=true;$w('branchSaveCounts').disabled=true;
+    workflow.counts[key]=next;
+    try{await storeWorkflow();}catch(e){if(workflow.counts[key]===next){if(previous===undefined)delete workflow.counts[key];else workflow.counts[key]=previous;}throw e;}
+    delete countDrafts[key];
+    if(activeCountScope===key)renderStockCountTable();
+    if(branchCheckState.generation===generation&&branchCheckState.scope===scope.key)
+      $w('branchSaveStatus').textContent=`บันทึกยอดนับจริงแล้ว ${entered} รายการ · สาขา ${scope.branch} · ${scope.date} ดูยอดนี้ได้ในหน้า 3`;
+  }catch(e){$w('branchSaveStatus').textContent='บันทึกไม่สำเร็จ: '+e.message;}
+  finally{branchCountSaving=false;$w('branchSaveCounts').disabled=false;}
 }
