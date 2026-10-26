@@ -2,6 +2,7 @@
 'use strict';
 let workflow = { version: 1, batches: {}, branches: {}, counts: {}, settings: {} };
 let importPreview = null;
+let adminPreviewShowAll = false;
 let workflowReady = false;
 let workflowDb;
 let workflowSaveQueue = Promise.resolve();
@@ -100,7 +101,11 @@ function parseSourceWorkbook(book, type, quantityField) {
 function handleImportTypeChange() {
   importReadVersion++;
   importPreview = null;
+  adminPreviewShowAll = false;
+  $w('adminPreviewControls').classList.add('hidden');
   $w('excelFileInput').value = '';
+  $w('clearAdminImportBtn').disabled = true;
+  $w('validationErrorsList').innerHTML = '';
   $w('commitImportBtn').disabled = true;
   $w('stockOutMapping').classList.toggle('hidden', $w('importTypeSelect').value !== 'STOCK_OUT');
   $w('extraInHelp').classList.toggle('hidden', $w('importTypeSelect').value !== 'EXTRA_IN');
@@ -110,51 +115,97 @@ function handleImportTypeChange() {
   $w('validationErrorsBox').classList.add('hidden');
   renderMissingImportBom();
 }
-async function handleFileSelected(event) {
-  const readVersion=++importReadVersion;
-  importPreview = null; $w('commitImportBtn').disabled = true;
-  renderMissingImportBom();
-  const file = event.target.files[0]; if (!file) return;
-  const type = $w('importTypeSelect').value;
-  const quantityField = sourceQuantityField(type);
-  try {
-    if (typeof XLSX === 'undefined') throw Error('ไม่พบตัวอ่าน Excel กรุณาตรวจไฟล์ vendor/xlsx.full.min.js');
-    $w('importStatusBadge').textContent = 'กำลังอ่าน';
-    const parsed = parseSourceWorkbook(XLSX.read(await file.arrayBuffer(), { type: 'array' }), type, quantityField);
-    if ($w('importTypeSelect').value !== type || readVersion!==importReadVersion) return;
-    const dates = parsed.rows.map(r => r.date).sort();
-    importPreview = { ...parsed, type, file: file.name, quantityField, start: dates[0], end: dates[dates.length-1] };
-    $w('importStatusBadge').textContent = parsed.errors.length ? 'ตรวจพบข้อผิดพลาด' : 'พร้อมตรวจทาน';
-    $w('importSummaryText').textContent = `${file.name}: ${parsed.rows.length.toLocaleString()} แถว / ${new Set(parsed.rows.map(r=>r.branch)).size} สาขา / ${importPreview.start || '—'} ถึง ${importPreview.end || '—'} · ใช้ ${quantityField} · แสดงตัวอย่าง 30 แถว`;
-    $w('validationErrorsBox').classList.toggle('hidden', !parsed.errors.length);
-    $w('validationErrorsList').innerHTML = parsed.errors.slice(0,30).map(e=>`<li>${esc(e)}</li>`).join('');
-    $w('previewTableHead').innerHTML = '<tr><th>สาขา</th><th>วันที่</th><th>รหัสสินค้า</th><th>ชื่อสินค้า</th><th>จำนวนต้นทาง</th></tr>';
-    $w('previewTableBody').innerHTML = parsed.rows.slice(0,30).map(r=>`<tr><td class="p-2">${esc(r.branchName)} (${esc(r.branch)})</td><td>${r.date}</td><td>${esc(r.code)}</td><td>${esc(r.name)}</td><td>${fmt(r.qty)}</td></tr>`).join('');
-    $w('commitImportBtn').disabled = parsed.errors.length > 0 || !workflowReady;
-    renderMissingImportBom();
-  } catch (error) { $w('importStatusBadge').textContent = 'อ่านไม่สำเร็จ'; appAlert(error.message); }
+function clearAdminImportFile(){
+  if(adminImportSaving)return;
+  handleImportTypeChange();
+  $w('previewTableHead').innerHTML='';
+  $w('importSummaryText').textContent='ล้างไฟล์ที่เลือกแล้ว กรุณาเลือกไฟล์ใหม่';
 }
-async function commitImportData() {
-  if (!importPreview || importPreview.errors.length || !workflowReady) return;
-  const p = importPreview, key = `${p.type}:${p.month}`;
-  if (workflow.batches[key] && !await appConfirm(`แทนที่ไฟล์${labels[p.type]}ของเดือน ${p.month} ทั้งชุดหรือไม่? ใช้ไฟล์รวมฉบับล่าสุด ยอดตรวจนับจะคงอยู่`)) return;
-  const before = structuredClone(workflow);
-  $w('commitImportBtn').disabled = true;
-  const aggregate = new Map();
-  const newMenuCodes=p.type==='SALES'?newImportMenuCodes(p.rows,appState.recipes,workflow.batches):new Set();
-  p.rows.forEach(r => {
-    if(!workflow.removedBranches?.[r.branch])workflow.branches[r.branch] = r.branchName;
-    const id = JSON.stringify([r.branch,r.date,r.code]);
-    if (!aggregate.has(id)) aggregate.set(id, { branch:r.branch,date:r.date,code:r.code,name:r.name,qty:0,unit:r.unit,...(newMenuCodes.has(r.code)?{newMenu:true}:{}) });
-    aggregate.get(id).qty += r.qty;
-  });
-  workflow.batches[key] = { type:p.type,month:p.month,file:p.file,quantityField:p.quantityField,start:p.start,end:p.end,branches:[...new Set(p.rows.map(r=>r.branch))],rows:[...aggregate.values()],sourceRows:p.rows.length, importedAt:new Date().toISOString() };
-  try {
-    await storeWorkflow(); importPreview = null;
-    refreshWorkflowSelectors(); renderImportHistory(); renderCriticalSettings();
-    $w('importStatusBadge').textContent = 'บันทึกแล้ว';
-    $w('importSummaryText').textContent = `บันทึก ${p.rows.length.toLocaleString()} รายการ แยกตามสาขาแล้ว ช่วงวันที่ ${p.start} ถึง ${p.end}`;
-  } catch (error) { workflow = before; storageError(error); $w('commitImportBtn').disabled = false; }
+function parseAdminWorkbook(book,file){
+  const names={SALES:'ยอดขาย',STOCK_IN:'stock in',STOCK_OUT:'stock out',EXTRA_IN:'เครื่องดื่ม in'},parts=[],errors=[];
+  const norm=n=>n.toLowerCase().replace(/\s/g,'');
+  for(const [type,label]of Object.entries(names)){
+    const found=book.SheetNames.filter(n=>norm(n)===norm(label));
+    if(found.length!==1){errors.push('ต้องมีชีต '+label+' เพียง 1 ชีต');continue;}
+    const sheet=book.Sheets[found[0]],grid=XLSX.utils.sheet_to_json(sheet,{header:1,defval:null});
+    if(!grid.slice(1).some(row=>row.some(v=>v!=null&&String(v).trim()!==''))){parts.push({type,file,rows:[],errors:[],empty:true});continue;}
+    const parsed=parseSourceWorkbook({SheetNames:found,Sheets:{[found[0]]:sheet}},type);
+    errors.push(...parsed.errors.map(e=>label+': '+e));
+    const dates=parsed.rows.map(r=>r.date).sort();
+    parts.push({...parsed,type,file,quantityField:sourceQuantityField(type),start:dates[0],end:dates[dates.length-1]});
+  }
+  if(!parts.some(p=>p.rows.length))errors.push('ไม่มีข้อมูลในไฟล์');
+  if(new Set(parts.filter(p=>p.rows.length).map(p=>p.month)).size>1)errors.push('ทั้ง 4 ชีตต้องเป็นข้อมูลเดือนเดียวกัน');
+  return {combined:true,file,parts,errors};
+}
+function renderAdminImportPreview(){
+  const p=importPreview?.parts?.find(p=>p.type===$w('importTypeSelect').value);
+  $w('previewTableHead').innerHTML='<tr><th>สาขา</th><th>วันที่</th><th>รหัสสินค้า</th><th>ชื่อสินค้า</th><th>จำนวนต้นทาง</th></tr>';
+  const rows=p?.rows||[];
+  const visible=adminPreviewShowAll?rows:rows.slice(0,30);
+  $w('adminPreviewControls').classList.toggle('hidden',!p);
+  $w('adminPreviewCount').textContent=`แสดง ${visible.length.toLocaleString('th-TH')} จาก ${rows.length.toLocaleString('th-TH')} แถว`;
+  $w('adminPreviewToggle').classList.toggle('hidden',rows.length<=30);
+  $w('adminPreviewToggle').textContent=adminPreviewShowAll?'แสดง 30 แถว':'ดูทั้งหมด';
+  $w('previewTableBody').innerHTML=visible.map(r=>`<tr><td class="p-2">${esc(r.branchName)} (${esc(r.branch)})</td><td>${esc(r.date)}</td><td>${esc(r.code)}</td><td>${esc(r.name)}</td><td>${fmt(r.qty)}</td></tr>`).join('');
+  renderMissingImportBom();
+}
+function toggleAdminImportPreview(){
+  adminPreviewShowAll=!adminPreviewShowAll;
+  renderAdminImportPreview();
+}
+async function handleFileSelected(event){
+  const version=++importReadVersion;importPreview=null;adminPreviewShowAll=false;$w('commitImportBtn').disabled=true;
+  renderAdminImportPreview();
+  const file=event.target.files[0];
+  $w('clearAdminImportBtn').disabled=!file;
+  if(!file){handleImportTypeChange();return;}
+  try{
+    $w('importStatusBadge').textContent='กำลังอ่าน';
+    const parsed=parseAdminWorkbook(XLSX.read(await file.arrayBuffer(),{type:'array'}),file.name);
+    if(version!==importReadVersion)return;
+    importPreview=parsed;
+    $w('importSummaryText').textContent=file.name+' · '+parsed.parts.map(p=>labels[p.type]+': '+p.rows.length+' แถว'+(p.empty?' (ว่าง ไม่แทนที่ข้อมูลเดิม)':'')).join(' · ');
+    $w('importStatusBadge').textContent=parsed.errors.length?'ตรวจพบข้อผิดพลาด':'พร้อมตรวจทาน';
+    $w('validationErrorsBox').classList.toggle('hidden',!parsed.errors.length);
+    $w('validationErrorsList').innerHTML=parsed.errors.slice(0,30).map(e=>'<li>'+esc(e)+'</li>').join('');
+    $w('commitImportBtn').disabled=parsed.errors.length>0||!workflowReady;
+    renderAdminImportPreview();
+  }catch(e){if(version!==importReadVersion)return;$w('importStatusBadge').textContent='อ่านไม่สำเร็จ';appAlert(e.message);}
+}
+let adminImportSaving=false;
+async function commitImportData(){
+  if(adminImportSaving||!importPreview||importPreview.errors.length||!workflowReady||bomCloud.member?.role!=='admin')return;
+  const preview=importPreview,parts=preview.parts.filter(p=>p.rows.length);
+  adminImportSaving=true;$w('commitImportBtn').disabled=true;
+  $w('clearAdminImportBtn').disabled=true;
+  $w('excelFileInput').disabled=true;
+  let before;
+  try{
+    const replaced=parts.filter(p=>workflow.batches[p.type+':'+p.month]);
+    if(replaced.length&&!await appConfirm('แทนที่ข้อมูลเดือนเดิมของ '+replaced.map(p=>labels[p.type]+' '+p.month).join(', ')+' ด้วยไฟล์นี้หรือไม่? ชีตว่างและยอดตรวจนับเดิมจะคงอยู่'))return;
+    if(preview!==importPreview||!workflowReady||bomCloud.member?.role!=='admin')return;
+    before=structuredClone(workflow);
+    for(const p of parts){
+      const aggregate=new Map(),newCodes=p.type==='SALES'?newImportMenuCodes(p.rows,appState.recipes,workflow.batches):new Set();
+      for(const r of p.rows){
+        if(!workflow.removedBranches?.[r.branch])workflow.branches[r.branch]=r.branchName;
+        const id=JSON.stringify([r.branch,r.date,r.code]);
+        if(!aggregate.has(id))aggregate.set(id,{branch:r.branch,date:r.date,code:r.code,name:r.name,qty:0,unit:r.unit,...(newCodes.has(r.code)?{newMenu:true}:{})});
+        aggregate.get(id).qty+=r.qty;
+      }
+      workflow.batches[p.type+':'+p.month]={type:p.type,month:p.month,file:p.file,quantityField:p.quantityField,start:p.start,end:p.end,branches:[...new Set(p.rows.map(r=>r.branch))],rows:[...aggregate.values()],sourceRows:p.rows.length,importedAt:new Date().toISOString()};
+    }
+    await storeWorkflow();importPreview=null;
+    $w('adminPreviewControls').classList.add('hidden');
+    refreshWorkflowSelectors();renderImportHistory();renderCriticalSettings();
+    $w('importStatusBadge').textContent='บันทึกแล้ว';
+    $w('importSummaryText').textContent='บันทึกไฟล์ '+preview.file+' แล้ว · '+parts.map(p=>labels[p.type]+': '+p.rows.length+' แถว').join(' · ');
+  }catch(e){if(before)workflow=before;storageError(e);}
+  finally{adminImportSaving=false;$w('commitImportBtn').disabled=!importPreview||!!importPreview.errors.length;
+    $w('clearAdminImportBtn').disabled=!importPreview;
+    $w('excelFileInput').disabled=false;
+  }
 }
 function renderImportHistory() {
   renderMissingImportBom();
@@ -627,14 +678,17 @@ function missingImportBomRows(rows,recipes){
 }
 function renderMissingImportBom(){
   const panel=$w('missingImportBomPanel');if(!panel)return;
-  const preview=importPreview?.type==='SALES'?importPreview:null;
+  const preview=importPreview?.combined?importPreview.parts.find(p=>p.type==='SALES'&&p.rows.length):(importPreview?.type==='SALES'?importPreview:null);
   const batches=Object.values(workflow.batches||{}).filter(b=>b.type==='SALES');
   const rows=preview?preview.rows:batches.flatMap(b=>b.rows||[]);
   panel.hidden=!preview&&!batches.length;
   const missing=missingImportBomRows(rows,appState.recipes);
   const newCodes=preview?newImportMenuCodes(rows,appState.recipes,workflow.batches):new Set(rows.filter(r=>r.newMenu).map(r=>r.code));
   $w('missingImportBomSummary').textContent=(preview?'ไฟล์ที่กำลังตรวจ: '+preview.file:'ยอดขายส่วนกลางที่บันทึกแล้วทั้งหมด')+' · พบสินค้าที่ยังไม่มีสูตร '+missing.length+' รายการ (รวมรหัสซ้ำแล้ว)';
-  $w('missingImportBomBody').innerHTML=missing.map(r=>`<tr><td class="p-3">${esc(r.code)}</td><td class="p-3 font-semibold">${esc(r.name)}${newCodes.has(r.code)?'<span style="display:inline-block;margin-left:8px;padding:3px 9px;border-radius:999px;background:#dcfce7;color:#166534;font-size:12px;font-weight:700">เมนูใหม่</span>':''}</td><td class="p-3">${esc(r.reason)}</td></tr>`).join('')||'<tr><td colspan="3" class="p-3 text-emerald-700">สินค้าทุกรหัสมีสูตร BOM แล้ว</td></tr>';
+  const query=($w('missingImportBomSearch')?.value||'').trim().toLocaleLowerCase();
+  const filtered=missing.filter(r=>(r.code+' '+r.name).toLocaleLowerCase().includes(query));
+  $w('missingImportBomSummary').textContent+=' · แสดง '+filtered.length+' รายการ';
+  $w('missingImportBomBody').innerHTML=filtered.map(r=>`<tr><td class="p-3">${esc(r.code)}</td><td class="p-3 font-semibold">${esc(r.name)}${newCodes.has(r.code)?'<span style="display:inline-block;margin-left:8px;padding:3px 9px;border-radius:999px;background:#dcfce7;color:#166534;font-size:12px;font-weight:700">เมนูใหม่</span>':''}</td><td class="p-3">${esc(r.reason)} <button type="button" data-code="${esc(r.code)}" data-name="${esc(r.name)}" onclick="addBomFromImport(this.dataset.code,this.dataset.name,this)" class="ml-2 border border-emerald-300 text-emerald-700 rounded-lg px-3 py-2 whitespace-nowrap">เพิ่มสูตร</button></td></tr>`).join('')||`<tr><td colspan="3" class="p-3">${missing.length?'ไม่พบรหัสหรือชื่อที่ค้นหา':'สินค้าทุกรหัสมีสูตร BOM แล้ว'}</td></tr>`;
 }
 
 function compareBranchIds(a,b){
@@ -681,4 +735,27 @@ async function deleteMasterBranch(){
     if(source===workflow){refreshWorkflowSelectors();status.textContent='ลบสาขา '+name+' ('+id+') ออกจากรายการแล้ว ข้อมูลเดิมยังเก็บไว้';}
   }catch(e){status.textContent='ลบไม่สำเร็จ: '+e.message;}
   finally{addingBranch=false;$w('deleteBranchButton').disabled=false;$w('newBranchSave').disabled=false;}
+}
+
+let addingImportBom=false;
+async function addBomFromImport(code,name,button){
+  if(!workflowReady||bomCloud.member?.role!=='admin'||addingImportBom)return;
+  addingImportBom=true;button.disabled=true;
+  let created=null;const recipes=appState.recipes;
+  try{
+    let recipe=recipes.find(r=>r.menuCode===code);
+    if(!recipe){
+      created={menuId:'menu-'+crypto.randomUUID(),menuCode:code,menuName:name,sellingPrice:0,items:[]};
+      recipes.push(created);recipe=created;
+      await storeWorkflow();
+    }
+    if(appState.recipes!==recipes)return;
+    appState.selectedMenuId=recipe.menuId;
+    $w('menuSearch').value='';switchTab('tab-bom');
+    $w('currentRecipeName').scrollIntoView({behavior:'smooth',block:'center'});
+    $w('ingredientSearchInput').focus({preventScroll:true});
+  }catch(e){
+    if(created){const index=recipes.indexOf(created);if(index>=0)recipes.splice(index,1);}
+    appAlert('เปิดเพิ่มสูตรไม่สำเร็จ: '+e.message);
+  }finally{addingImportBom=false;button.disabled=false;}
 }
