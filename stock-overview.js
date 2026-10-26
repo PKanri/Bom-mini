@@ -75,23 +75,28 @@ function exportStockOverview() {
     const entries=orderedCountEntries().filter(([code,s])=>(code+' '+s.name).toLocaleLowerCase().includes(search));
     const branches=stockOverviewSelectedBranches(selected);
     if(!entries.length||!branches.length)throw Error('ไม่มีข้อมูลตามตัวกรองที่เลือกให้ส่งออก');
-    const rows=[['สต็อกคงเหลือแต่ละสาขา'],['วันที่ '+date+' · เฉพาะยอดบันทึกวันที่เลือก · ช่องว่าง = ยังไม่บันทึกหรือรอตรวจหน่วย'],
-      ['วัตถุดิบ / หน่วย',...branches.map(([id,name])=>name+' ('+id+')')]];
+    const snapshots=branches.map(([id])=>stockOverviewSnapshot(id,date));
+    const rows=[['สต็อกคงเหลือแต่ละสาขา'],['วันที่ดูยอด '+date+' · ยอดตามหน้าเว็บ · วันที่ของยอดระบุที่หัวสาขา · ช่องว่าง = ยังไม่บันทึกหรือรอตรวจหน่วย'],
+      ['วัตถุดิบ / หน่วย',...branches.map(([id,name])=>name+' ('+id+')')],
+      ['',...snapshots.map(snap=>snap.current?'บันทึกวันที่ '+date:'ยังไม่บันทึกวันที่ '+date+'\n'+(snap.date?'ใช้ยอดล่าสุดวันที่ '+snap.date:'ไม่มีประวัติก่อนวันที่เลือก'))]];
     for(const [code,s]of entries){
       const main=countUnits(s,code)[0];
-      rows.push([s.name+'\n'+code+' · '+main.label,...branches.map(([id])=>{
-        const count=workflow.counts[countKey(id,date)]?.[code];
+      rows.push([s.name+'\n'+code+' · '+main.label,...snapshots.map(snap=>{
+        const count=snap.counts[code];
         if(count?.qty==null||!Number.isFinite(count.qty)||count.unitReview)return null;
         return stockOverviewUnits(count,s,code).map(u=>fmt(u.value)+' '+u.label).join('\n');
       })]);
     }
     const sheet=XLSX.utils.aoa_to_sheet(rows);
     sheet['!cols']=[{wch:52},...branches.map(()=>({wch:30}))];
-    sheet['!rows']=[{hpt:24},{hpt:30},{hpt:30},...entries.map(()=>({hpt:48}))];
-    sheet['!merges']=[{s:{r:0,c:0},e:{r:0,c:branches.length}},{s:{r:1,c:0},e:{r:1,c:branches.length}}];
-    sheet['!autofilter']={ref:XLSX.utils.encode_range({s:{r:2,c:0},e:{r:rows.length-1,c:branches.length}})};
+    sheet['!rows']=[{hpt:24},{hpt:30},{hpt:42},{hpt:44},...entries.map(()=>({hpt:48}))];
+    sheet['!merges']=[{s:{r:0,c:0},e:{r:0,c:branches.length}},{s:{r:1,c:0},e:{r:1,c:branches.length}},{s:{r:2,c:0},e:{r:3,c:0}}];
+    // Explicit blank cells retain grid borders even when no stock was recorded.
+    for(let r=2;r<rows.length;r++)for(let c=0;c<=branches.length;c++){
+      const address=XLSX.utils.encode_cell({r,c});if(!sheet[address])sheet[address]={t:'s',v:''};
+    }
     const book=XLSX.utils.book_new();XLSX.utils.book_append_sheet(book,sheet,'สต็อกคงเหลือ');
-    XLSX.writeFile(book,'สต็อกคงเหลือ_ตาราง_'+date+'_'+(selected==='ALL'?'ทุกสาขา':selected==='CUSTOM'?'สาขาที่เลือก':selected)+'.xlsx');
+    downloadStockOverviewWorkbook(book,'สต็อกคงเหลือ_ตาราง_'+date+'_'+(selected==='ALL'?'ทุกสาขา':selected==='CUSTOM'?'สาขาที่เลือก':selected)+'.xlsx');
   }catch(e){appAlert(e.message);}
 }
 
@@ -209,3 +214,28 @@ async function saveStockOverviewLayout(){
     }
   }finally{stockOverviewLayoutSaving=false;button.disabled=false;}
 }
+
+function styledStockOverviewBytes(book){
+  // The bundled SheetJS writer omits custom cell styles; add standard OOXML styles to its ZIP.
+  const zip=XLSX.CFB.read(new Uint8Array(XLSX.write(book,{type:'array',bookType:'xlsx'})),{type:'buffer'});
+  const encoder=new TextEncoder(),decoder=new TextDecoder();
+  const styles=`<?xml version="1.0" encoding="UTF-8" standalone="yes"?><styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><fonts count="1"><font><sz val="11"/><name val="Tahoma"/><color rgb="FF000000"/></font></fonts><fills count="2"><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill></fills><borders count="2"><border><left/><right/><top/><bottom/><diagonal/></border><border><left style="thin"><color rgb="FF000000"/></left><right style="thin"><color rgb="FF000000"/></right><top style="thin"><color rgb="FF000000"/></top><bottom style="thin"><color rgb="FF000000"/></bottom><diagonal/></border></borders><cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs><cellXfs count="4"><xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"><alignment wrapText="1"/></xf><xf numFmtId="0" fontId="0" fillId="0" borderId="1" xfId="0" applyBorder="1" applyAlignment="1"><alignment horizontal="center" vertical="center" wrapText="1"/></xf><xf numFmtId="0" fontId="0" fillId="0" borderId="1" xfId="0" applyBorder="1" applyAlignment="1"><alignment horizontal="left" vertical="center" wrapText="1"/></xf><xf numFmtId="0" fontId="0" fillId="0" borderId="1" xfId="0" applyBorder="1" applyAlignment="1"><alignment horizontal="center" vertical="bottom" wrapText="1"/></xf></cellXfs><cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles></styleSheet>`;
+  XLSX.CFB.utils.cfb_add(zip,'/xl/styles.xml',encoder.encode(styles));
+  const entry=XLSX.CFB.find(zip,'/xl/worksheets/sheet1.xml');
+  const xml=decoder.decode(new Uint8Array(entry.content)).replace(/<c\b([^>]*)>/g,(tag,attrs)=>{
+    const address=/\br="([A-Z]+)(\d+)"/.exec(attrs);if(!address)return tag;
+    const row=Number(address[2]),col=address[1];
+    const style=row<3?0:col==='A'?(row<5?3:2):1;
+    return '<c'+attrs.replace(/\s+s="[^"]*"/g,'')+' s="'+style+'">';
+  });
+  XLSX.CFB.utils.cfb_add(zip,'/xl/worksheets/sheet1.xml',encoder.encode(xml));
+  return XLSX.CFB.write(zip,{type:'array',fileType:'zip',compression:true});
+}
+function downloadStockOverviewWorkbook(book,filename){
+  const bytes=styledStockOverviewBytes(book);
+  const url=URL.createObjectURL(new Blob([bytes],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'}));
+  const link=document.createElement('a');link.href=url;link.download=filename;document.body.appendChild(link);link.click();link.remove();
+  setTimeout(()=>URL.revokeObjectURL(url),1000);
+}
+
+

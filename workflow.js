@@ -143,7 +143,7 @@ async function commitImportData() {
   const aggregate = new Map();
   const newMenuCodes=p.type==='SALES'?newImportMenuCodes(p.rows,appState.recipes,workflow.batches):new Set();
   p.rows.forEach(r => {
-    workflow.branches[r.branch] = r.branchName;
+    if(!workflow.removedBranches?.[r.branch])workflow.branches[r.branch] = r.branchName;
     const id = JSON.stringify([r.branch,r.date,r.code]);
     if (!aggregate.has(id)) aggregate.set(id, { branch:r.branch,date:r.date,code:r.code,name:r.name,qty:0,unit:r.unit,...(newMenuCodes.has(r.code)?{newMenu:true}:{}) });
     aggregate.get(id).qty += r.qty;
@@ -162,9 +162,10 @@ function renderImportHistory() {
   if(typeof refreshCleanupPeriods==='function')refreshCleanupPeriods();
 }
 function refreshWorkflowSelectors() {
+  renderBranchManager();
   for (const id of ['stockCountBranchInput','varianceBranchInput']) {
     const select = $w(id), previous = select.value;
-    select.innerHTML = (id === 'varianceBranchInput' ? '<option value="ALL">ทุกสาขา (แสดงแยกสาขา)</option>' : '<option value="">เลือกสาขาที่ตรวจนับ</option>') + Object.entries(workflow.branches).sort((a,b)=>a[1].localeCompare(b[1])).map(([code,name])=>`<option value="${esc(code)}">${esc(name)} (${esc(code)})</option>`).join('');
+    select.innerHTML = (id === 'varianceBranchInput' ? '<option value="ALL">ทุกสาขา (แสดงแยกสาขา)</option>' : '<option value="">เลือกสาขาที่ตรวจนับ</option>') + Object.entries(workflow.branches).sort(compareBranchIds).map(([code,name])=>`<option value="${esc(code)}">${esc(name)} (${esc(code)})</option>`).join('');
     if ([...select.options].some(o=>o.value===previous)) select.value=previous;
   }
   const months = [...new Set([localDateString().slice(0,7),...Object.values(workflow.batches).map(b=>b.month).filter(Boolean)])].sort().reverse();
@@ -285,8 +286,8 @@ function materialEditLocks(mat) {
   const usedInRecipe = appState.recipes.some(recipe => recipe.items.some(item => item.materialId === mat.id));
   return { code: counted || configured || imported, unit: counted || configured || usedInRecipe };
 }
-function openSelectedMaterialEditor() {
-  const mat = appState.materials.find(m => m.id === $w('ingredientSelectInput').value);
+function openSelectedMaterialEditor(materialId = $w('ingredientSelectInput').value) {
+  const mat = appState.materials.find(m => m.id === materialId);
   if (!mat) { appAlert('กรุณาเลือกวัตถุดิบที่ต้องการแก้ไข'); return; }
   editingMaterialId = mat.id;
   const recipe = appState.recipes.find(r => r.menuId === appState.selectedMenuId);
@@ -634,4 +635,50 @@ function renderMissingImportBom(){
   const newCodes=preview?newImportMenuCodes(rows,appState.recipes,workflow.batches):new Set(rows.filter(r=>r.newMenu).map(r=>r.code));
   $w('missingImportBomSummary').textContent=(preview?'ไฟล์ที่กำลังตรวจ: '+preview.file:'ยอดขายส่วนกลางที่บันทึกแล้วทั้งหมด')+' · พบสินค้าที่ยังไม่มีสูตร '+missing.length+' รายการ (รวมรหัสซ้ำแล้ว)';
   $w('missingImportBomBody').innerHTML=missing.map(r=>`<tr><td class="p-3">${esc(r.code)}</td><td class="p-3 font-semibold">${esc(r.name)}${newCodes.has(r.code)?'<span style="display:inline-block;margin-left:8px;padding:3px 9px;border-radius:999px;background:#dcfce7;color:#166534;font-size:12px;font-weight:700">เมนูใหม่</span>':''}</td><td class="p-3">${esc(r.reason)}</td></tr>`).join('')||'<tr><td colspan="3" class="p-3 text-emerald-700">สินค้าทุกรหัสมีสูตร BOM แล้ว</td></tr>';
+}
+
+function compareBranchIds(a,b){
+  const an=/^\d+$/.test(a[0]),bn=/^\d+$/.test(b[0]);
+  if(an!==bn)return an?-1:1;
+  return an?Number(a[0])-Number(b[0]):String(a[0]).localeCompare(String(b[0]),undefined,{numeric:true});
+}
+let addingBranch=false;
+async function addMasterBranch(){
+  if(!workflowReady||bomCloud.member?.role!=='admin'||addingBranch)return;
+  const id=$w('newBranchCode').value.trim(),name=$w('newBranchName').value.trim(),status=$w('newBranchStatus');
+  if(!/^\d+$/.test(id)||!name){status.textContent='กรอกรหัสสาขาเป็นตัวเลข และชื่อสาขาให้ครบ';return;}
+  if(Object.keys(workflow.branches).some(code=>code===id||(/^\d+$/.test(code)&&Number(code)===Number(id)))){status.textContent='รหัสสาขานี้มีอยู่แล้ว';return;}
+  const source=workflow,removed=workflow.removedBranches?.[id];
+  if(source.removedBranches)delete source.removedBranches[id];
+  addingBranch=true;$w('newBranchSave').disabled=true;
+  status.textContent='กำลังบันทึก…';source.branches[id]=name;
+  try{await storeWorkflow();}
+  catch(e){delete source.branches[id];if(removed)source.removedBranches[id]=removed;status.textContent='บันทึกไม่สำเร็จ: '+e.message;return;}
+  finally{addingBranch=false;$w('newBranchSave').disabled=false;}
+  if(source!==workflow)return;
+  refreshWorkflowSelectors();
+  $w('newBranchCode').value='';$w('newBranchName').value='';
+  status.textContent='เพิ่มสาขา '+name+' ('+id+') แล้ว';
+}
+
+function renderBranchManager(){
+  const select=$w('manageBranchSelect');if(!select)return;
+  const selected=select.value;
+  select.innerHTML='<option value="">เลือกสาขาที่ต้องการลบ</option>'+Object.entries(workflow.branches).sort(compareBranchIds).map(([id,name])=>`<option value="${esc(id)}">${esc(name)} (${esc(id)})</option>`).join('');
+  if(Object.hasOwn(workflow.branches,selected))select.value=selected;
+}
+async function deleteMasterBranch(){
+  if(!workflowReady||bomCloud.member?.role!=='admin'||addingBranch)return;
+  const id=$w('manageBranchSelect').value,name=workflow.branches[id],status=$w('newBranchStatus');
+  if(!id||!Object.hasOwn(workflow.branches,id)){status.textContent='เลือกสาขาที่ต้องการลบก่อน';return;}
+  addingBranch=true;$w('deleteBranchButton').disabled=true;$w('newBranchSave').disabled=true;
+  const source=workflow,previousRemoved=source.removedBranches;
+  try{
+    if(!await appConfirm('ลบสาขา '+name+' ('+id+') ออกจากรายการเลือกหรือไม่?\nยอดนับและข้อมูลนำเข้าเดิมจะเก็บไว้ การนำเข้าไฟล์จะไม่เพิ่มสาขานี้กลับมาอัตโนมัติ หากต้องการใช้ใหม่ ให้เพิ่มรหัสเดิมอีกครั้ง'))return;
+    if(source!==workflow||bomCloud.member?.role!=='admin')return;
+    delete source.branches[id];source.removedBranches={...previousRemoved,[id]:{name}};
+    try{await storeWorkflow();}catch(e){source.branches[id]=name;if(previousRemoved===undefined)delete source.removedBranches;else source.removedBranches=previousRemoved;throw e;}
+    if(source===workflow){refreshWorkflowSelectors();status.textContent='ลบสาขา '+name+' ('+id+') ออกจากรายการแล้ว ข้อมูลเดิมยังเก็บไว้';}
+  }catch(e){status.textContent='ลบไม่สำเร็จ: '+e.message;}
+  finally{addingBranch=false;$w('deleteBranchButton').disabled=false;$w('newBranchSave').disabled=false;}
 }

@@ -2,7 +2,7 @@
 const COUNT_UNIT_LIST = {
   'RM-101-0040':['แพ็ค (1000 กรัม)','ถุง',1,0.1],
   'RM-101-0267':['แพ็ค (2000 กรัม)','ชุด',1,0.1],
-  'RM-101-0348':['ชั่งน้ำหนัก (กรัม)','กรัม',1/500,1/500],
+  'RM-101-0348':['แพ็ค (500กรัม/แพ็ค)','กรัม',1,1/500],
   'RM-101-0039':['แพ็ค (500 กรัม/แพ็ค)','กรัม',1,1/500],
   'RM-101-0263':['แพ็ค (1000 กรัม)','กรัม',1,1/1000],
   'RM-101-0002':['แพ็ค (35 ไม้)','ไม้',1,1/35],
@@ -52,6 +52,7 @@ async function applyCountUnitList() {
   try{await storeWorkflow();}catch(error){workflow=previous;appState.materials=materials;throw error;}
 }
 function countUnits(setting, code) {
+  if(Array.isArray(setting.countUnits)&&setting.countUnits.length)return setting.countUnits.map(u=>({...u}));
   const spec=COUNT_UNIT_LIST[code];
   if(spec) return [{label:spec[0],factor:spec[2]},...(spec[1]==='-'?[]:[{label:spec[1],factor:spec[3]}])];
   const units = [];

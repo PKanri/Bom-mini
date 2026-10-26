@@ -28,7 +28,7 @@ function branchCheckScope() {
 function openBranchCheck() {
   const member=typeof bomCloud!=='undefined'?bomCloud.member:null;
   const selected=$w('branchCheckBranch').value;
-  const branches=member?.role==='branch'?[[member.branch,workflow.branches[member.branch]||member.branch]]:Object.entries(workflow.branches);
+  const branches=member?.role==='branch'?[[member.branch,workflow.branches[member.branch]||member.branch]]:Object.entries(workflow.branches).sort(compareBranchIds);
   $w('branchCheckBranch').innerHTML='<option value="">เลือกสาขา</option>'+branches.map(([id,name])=>`<option value="${esc(id)}">${esc(name)} (${esc(id)})</option>`).join('');
   $w('branchCheckBranch').value=member?.role==='branch'?member.branch:selected;
   $w('branchCheckBranch').disabled=member?.role==='branch';

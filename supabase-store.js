@@ -74,6 +74,7 @@ function cloudRender() {
   $w('nav-tab-import').hidden=Boolean(branch);
   $w('cloudRestoreMenu').hidden=bomCloud.member?.role!=='admin';
   $w('criticalLayoutPanel').hidden=bomCloud.member?.role!=='admin';
+  $w('addBranchPanel').hidden=bomCloud.member?.role!=='admin';
   $w('nav-tab-stock-overview').hidden=bomCloud.member?.role!=='admin';
   cloudArrangeNavigation(Boolean(branch));
   if(typeof resetStockOverview==='function')resetStockOverview();
@@ -189,6 +190,7 @@ function cloudClearSession() {
   $w('nav-tab-stock-overview').hidden=true;
   $w('cloudRestoreMenu').hidden=true;
   $w('criticalLayoutPanel').hidden=true;
+  $w('addBranchPanel').hidden=true;
   $w('criticalLayoutEditor').open=false;
   if(typeof resetStockOverview==='function')resetStockOverview();
   if(typeof resetBranchCheck==='function')resetBranchCheck();

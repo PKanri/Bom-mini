@@ -133,6 +133,16 @@
     </div>
   </header>
 
+  <dialog id="renameMenuDialog" class="ponn-dialog" aria-labelledby="renameMenuTitle">
+    <form onsubmit="event.preventDefault();saveRenamedMenu()">
+      <h2 id="renameMenuTitle">เปลี่ยนชื่อเมนู</h2>
+      <p id="renameMenuCode" class="text-sm text-slate-500 mb-3"></p>
+      <label for="renameMenuInput" class="block text-sm">ชื่อเมนู</label>
+      <input id="renameMenuInput" required maxlength="250" class="border rounded-lg p-3 w-full mt-2" autocomplete="off">
+      <p id="renameMenuStatus" role="status" class="text-sm text-rose-600 mt-2"></p>
+      <div class="ponn-dialog-actions"><button id="renameMenuCancel" type="button" onclick="document.getElementById('renameMenuDialog').close()">ยกเลิก</button><button id="renameMenuSave" type="submit" class="ponn-dialog-ok">บันทึกชื่อ</button></div>
+    </form>
+  </dialog>
   <!-- MAIN APP CONTAINER -->
   <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
     <p id="workflowStorage" class="text-xs text-slate-600 mb-4">กำลังเปิดข้อมูลที่บันทึกไว้…</p>
@@ -206,7 +216,9 @@
             กำหนดปริมาณวัตถุดิบต่อจาน หน่วยฐาน และ Yield เพื่อคำนวณยอดใช้ตามสูตรและหาผลต่างการใช้ของแต่ละสาขา
           </p>
         </div>
-        <div class="flex items-center gap-2">
+        <div class="flex flex-wrap items-center gap-2">
+          <button type="button" onclick="showNewMaterialMaster()" class="border border-emerald-300 text-emerald-700 rounded-xl px-4 py-2 text-sm hover:bg-emerald-50">เพิ่มวัตถุดิบหลัก</button>
+          <button type="button" onclick="showMaterialMaster()" class="border border-slate-300 rounded-xl px-4 py-2 text-sm">แก้ไขข้อมูลวัตถุดิบหลัก</button>
           <button onclick="showAddRecipeModal()" class="bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-xl text-xs font-semibold shadow-xs flex items-center gap-1.5 transition-colors">
             ➕ เพิ่มเมนู/สูตรใหม่
           </button>
@@ -230,6 +242,7 @@
             <div>
               <div class="flex items-center gap-2">
                 <h3 id="currentRecipeName" class="text-base font-bold text-[var(--foreground,#0f172a)]">ชื่อเมนู</h3>
+                <button type="button" onclick="openRenameMenu()" class="text-xs text-slate-700 border border-slate-200 rounded-lg px-3 py-2 hover:bg-slate-50">เปลี่ยนชื่อเมนู</button>
                 <button id="deleteMenuButton" type="button" onclick="deleteSelectedMenu()" class="text-xs text-rose-600 border border-rose-200 rounded-lg px-3 py-2 hover:bg-rose-50 disabled:opacity-40">ลบเมนูนี้</button>
                 <span id="currentRecipeCode" class="text-xs bg-slate-100 text-slate-700 font-mono px-2 py-0.5 rounded">CODE</span>
               </div>
@@ -269,9 +282,6 @@
                 เพิ่มวัตถุดิบลงในสูตรนี้: 
                 <span id="addFormMenuNameDisplay" class="text-emerald-700 bg-emerald-100/70 px-2.5 py-0.5 rounded-lg font-bold">ชื่อเมนู</span>
               </div>
-              <button type="button" onclick="openCreateMaterialModal()" class="text-xs text-indigo-600 hover:text-indigo-800 font-bold underline flex items-center gap-1 cursor-pointer">
-                ✨ + เพิ่มวัตถุดิบชนิดใหม่เข้า Master Data
-              </button>
             </div>
 
             <!-- Inputs matching user request -->
@@ -287,7 +297,6 @@
                   <button type="button" aria-label="แสดงรายการวัตถุดิบ" onclick="document.getElementById('ingredientSearchInput').focus();showIngredientOptions('')" style="position:absolute;right:8px;top:8px">▾</button>
                   <div id="ingredientOptions" role="listbox" hidden style="position:absolute;top:100%;left:0;right:0;max-height:280px;overflow-y:auto;z-index:50;background:white;border:1px solid #cbd5e1;border-radius:8px;box-shadow:0 6px 18px #0002"></div>
                 </div>
-                <button type="button" onclick="openSelectedMaterialEditor()" class="text-xs font-semibold text-indigo-700 hover:underline py-1">✏️ แก้ไขวัตถุดิบที่เลือก</button>
               </div>
 
               <!-- Field 2: และใช้จำนวนเท่าไหร่ -->
@@ -342,6 +351,19 @@
     <!-- MODULE 2: EXCEL DATA IMPORT (ADMIN) -->
     <!-- ==================================================================== -->
     <section id="tab-import" class="tab-content hidden space-y-6">
+      <details id="addBranchPanel" hidden class="bg-white border rounded-xl p-4">
+        <summary class="cursor-pointer font-semibold">จัดการชื่อสาขา</summary>
+        <form onsubmit="event.preventDefault();addMasterBranch()" class="flex flex-wrap items-end gap-3 mt-3">
+          <label>รหัสสาขา<input id="newBranchCode" required inputmode="numeric" pattern="[0-9]+" placeholder="เช่น 195" class="block border rounded-lg p-2"></label>
+          <label>ชื่อสาขา<input id="newBranchName" required placeholder="ชื่อสาขา" class="block border rounded-lg p-2"></label>
+          <button id="newBranchSave" type="submit" class="bg-emerald-600 text-white rounded-lg px-4 py-2">บันทึกสาขาใหม่</button>
+        </form>
+        <div class="flex flex-wrap items-end gap-3 mt-4 border-t pt-3">
+          <label>สาขาที่มีอยู่<select id="manageBranchSelect" class="block border rounded-lg p-2"></select></label>
+          <button id="deleteBranchButton" type="button" onclick="deleteMasterBranch()" class="border border-rose-200 text-rose-600 rounded-lg px-4 py-2">ลบสาขา</button>
+        </div>
+        <p id="newBranchStatus" role="status" class="text-sm text-slate-600 mt-2"></p>
+      </details>
       <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-[var(--card,#ffffff)] p-5 rounded-2xl border border-[var(--border,#e2e8f0)] shadow-xs">
         <div>
           <h2 class="text-lg font-bold text-[var(--foreground,#0f172a)] flex items-center gap-2">
@@ -780,7 +802,7 @@
           <span id="stockOverviewLayoutStatus" role="status" class="text-sm text-slate-500"></span>
           <p class="text-xs text-slate-500">บันทึกกับบัญชี ใช้ได้ทุกเบราว์เซอร์เมื่อเข้าสู่ระบบด้วยบัญชีเดียวกัน ทั้งตารางและ Excel ใช้ลำดับเดียวกัน</p>
         </div>
-        <p class="text-xs text-slate-500">ส่งออก Excel เฉพาะยอดที่บันทึกตรงวันที่เลือก ไม่ใช้ยอดย้อนหลังแทน ช่องที่ยังไม่บันทึกจะเว้นว่าง</p>
+        <p class="text-xs text-slate-500">ส่งออก Excel ตามยอดที่แสดงในตาราง พร้อมวันที่ของยอดแต่ละสาขา หากใช้ยอดย้อนหลังจะระบุวันที่ไว้ ช่องที่ไม่มีข้อมูลจะเว้นว่าง</p>
         <p id="stockOverviewSummary" role="status" class="text-sm text-slate-600"></p>
         <div id="stockOverviewScroll" style="overflow-x:auto" onscroll="syncStockOverviewScroll()"><table class="stock-overview-table"><thead id="stockOverviewHead"></thead><tbody id="stockOverviewBody"></tbody></table></div>
         <div id="stockOverviewScrollControls" class="stock-overview-scroll-controls" hidden>
@@ -1189,11 +1211,13 @@
           </td>
           <td class="p-3 text-right font-bold text-slate-900">${grossQty.toFixed(1)} ${mat.baseUnit}</td>
           <td class="p-3 text-center">
+            <button type="button" class="edit-recipe-item text-slate-600 hover:text-emerald-700 hover:bg-emerald-50 p-1 rounded-lg text-xs font-bold" title="แก้ไขปริมาณและ Yield">แก้ไข</button>
             <button type="button" onclick="deleteIngredientFromRecipe('${item.materialId}')" title="ลบออกจากสูตร" class="text-rose-500 hover:text-rose-700 hover:bg-rose-50 p-1 rounded-lg transition-colors text-xs font-bold cursor-pointer">
               🗑️ ลบ
             </button>
           </td>
         `;
+        tr.querySelector('.edit-recipe-item').onclick = () => openSelectedMaterialEditor(item.materialId);
         tbody.appendChild(tr);
       });
 
@@ -1333,6 +1357,40 @@
         appAlert('ลบเมนูไม่สำเร็จ: '+error.message);
       }finally{deletingMenu=false;renderBomModule();}
     }
+
+    let renameMenuId=null,renameMenuSaving=false;
+    function canRenameMenu(){return workflowReady&&(typeof BOM_SUPABASE==='undefined'||['admin','branch'].includes(bomCloud.member?.role));}
+    function openRenameMenu(){
+      if(!canRenameMenu()){appAlert('กรุณาเข้าสู่ระบบและรอโหลดข้อมูลก่อน');return;}
+      const recipe=appState.recipes.find(r=>r.menuId===appState.selectedMenuId);
+      if(!recipe)return;
+      renameMenuId=recipe.menuId;
+      document.getElementById('renameMenuInput').value=recipe.menuName;
+      document.getElementById('renameMenuCode').textContent='รหัส '+recipe.menuCode+' · ชื่อใหม่นี้ใช้ร่วมกันทุกสาขา';
+      document.getElementById('renameMenuStatus').textContent='';
+      document.getElementById('renameMenuDialog').showModal();
+      document.getElementById('renameMenuInput').select();
+    }
+    async function saveRenamedMenu(){
+      if(!canRenameMenu()||renameMenuSaving)return;
+      const recipe=appState.recipes.find(r=>r.menuId===renameMenuId);
+      const name=document.getElementById('renameMenuInput').value.trim();
+      const status=document.getElementById('renameMenuStatus');
+      if(!name){status.textContent='กรุณากรอกชื่อเมนู';return;}
+      if(name.length>250){status.textContent='ชื่อเมนูยาวได้ไม่เกิน 250 ตัวอักษร';return;}
+      if(!recipe){status.textContent='ไม่พบเมนูนี้แล้ว กรุณาเลือกเมนูใหม่';return;}
+      if(name===recipe.menuName){document.getElementById('renameMenuDialog').close();return;}
+      const previous=recipe.menuName;
+      renameMenuSaving=true;
+      for(const id of ['renameMenuInput','renameMenuSave','renameMenuCancel'])document.getElementById(id).disabled=true;
+      status.textContent='กำลังบันทึก…';recipe.menuName=name;
+      try{
+        await storeWorkflow();
+        document.getElementById('renameMenuDialog').close();renderBomModule();
+      }catch(error){recipe.menuName=previous;status.textContent='บันทึกไม่สำเร็จ: '+error.message;}
+      finally{renameMenuSaving=false;for(const id of ['renameMenuInput','renameMenuSave','renameMenuCancel'])document.getElementById(id).disabled=false;}
+    }
+    document.getElementById('renameMenuDialog').addEventListener('cancel',event=>{if(renameMenuSaving)event.preventDefault();});
 
     async function deleteIngredientFromRecipe(materialId) {
       const recipe = appState.recipes.find(r => r.menuId === appState.selectedMenuId);
@@ -2279,14 +2337,29 @@
   <script src="vendor/xlsx.full.min.js"></script>
   <script src="ponn-template.js"></script>
   <script src="supabase-config.js"></script>
-  <script src="workflow.js?v=20261025-new-menu"></script>
-  <script src="count-units.js?v=20261025-mobile"></script>
-  <script src="supabase-store.js?v=20261025-order"></script>
+  <script src="workflow.js?v=20261026-manage-branches"></script>
+  <script src="count-units.js?v=20261026-master"></script>
+  <script src="supabase-store.js?v=20261026-branches"></script>
   <script src="data-cleanup.js?v=20261023-dialog"></script>
   <script src="data-restore.js?v=20261023-dialog"></script>
-  <script src="branch-check.js?v=20261023-dialog"></script>
-  <script src="stock-overview.js?v=20261025-account-layout"></script>
+  <script src="branch-check.js?v=20261026-branches"></script>
+  <script src="stock-overview.js?v=20261026-black-grid"></script>
   <script src="critical-layout.js?v=20261025"></script>
+  <dialog id="materialMasterDialog" class="ponn-dialog" aria-label="แก้ไขข้อมูลวัตถุดิบหลัก" oncancel="if(masterSaving)event.preventDefault()">
+    <h2 id="masterTitle">แก้ไขข้อมูลวัตถุดิบหลัก</h2>
+    <form onsubmit="event.preventDefault();saveMaterialMaster()"><fieldset id="masterFields" class="space-y-3">
+      <label id="masterChoose" class="block">เลือกวัตถุดิบ<select id="masterMaterialSelect" onchange="loadMaterialMaster()" class="block w-full border rounded-lg p-2"></select></label>
+      <label class="block">รหัสวัตถุดิบ<input id="masterCode" required class="block w-full border rounded-lg p-2 read-only:bg-slate-100"></label>
+      <p id="masterHint" class="text-xs text-slate-500"></p>
+      <label class="block">ชื่อวัตถุดิบ<input id="masterName" required class="block w-full border rounded-lg p-2"></label>
+      <label class="block">หน่วยหลัก<input id="masterMain" required placeholder="เช่น แพ็ค (500กรัม/แพ็ค)" class="block w-full border rounded-lg p-2"></label>
+      <label class="block">หน่วยย่อย (ไม่มีให้เว้นว่าง)<input id="masterSub" placeholder="เช่น กรัม" class="block w-full border rounded-lg p-2"></label>
+      <label class="block">1 หน่วยหลัก มีกี่หน่วยย่อย<input id="masterRatio" type="number" min="0.000001" step="any" placeholder="เช่น 500" class="block w-full border rounded-lg p-2"></label>
+      <p id="masterUnitHelp" class="text-xs text-slate-500">หน่วยนี้ใช้สำหรับตรวจนับและแสดงรายงาน การเปลี่ยนชื่อหน่วยหลักต้องยังหมายถึงปริมาณเดิม สูตร BOM และยอดรวมที่บันทึกแล้วคงเดิม</p>
+      <div class="ponn-dialog-actions"><button type="button" onclick="document.getElementById('materialMasterDialog').close()">ยกเลิก</button><button type="submit" class="ponn-dialog-ok">บันทึก</button></div>
+    </fieldset><p id="masterStatus" role="status" class="text-sm text-rose-600"></p></form>
+  </dialog>
+  <script src="material-master.js?v=20261026-create"></script>
 </body>
 </html>
 
