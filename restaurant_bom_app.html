@@ -757,7 +757,12 @@
           <label class="block text-sm mt-2"><input id="branchCheckUnscoped" type="checkbox"> ยืนยันว่าไฟล์ที่กำลังเลือกเป็นของสาขาด้านบนเท่านั้น</label>
         </details>
         <div class="border rounded-xl p-3 space-y-2">
-          <label class="font-semibold">อัปโหลด Excel ไฟล์เดียว รวม 4 ชีต<input type="file" accept=".xlsx,.xls" onchange="loadBranchCheckWorkbook(this)" class="block mt-2"></label>
+          <div class="font-semibold">อัปโหลด Excel ไฟล์เดียว รวม 4 ชีต</div>
+          <div class="flex items-center flex-wrap gap-3 mt-2">
+            <button type="button" onclick="document.getElementById('branchWorkbookInput').click()" class="border border-slate-200 rounded-xl px-4 py-2 text-sm bg-white hover:bg-slate-50">เลือกไฟล์ Excel</button>
+            <span id="branchWorkbookName" class="text-sm text-slate-600 break-all" aria-live="polite">ยังไม่ได้เลือกไฟล์</span>
+            <input id="branchWorkbookInput" type="file" accept=".xlsx,.xls" onchange="loadBranchCheckWorkbook(this)" hidden>
+          </div>
           <p class="text-sm text-slate-600">ชื่อชีต: ยอดขาย, itec in, itec out, เครื่องดื่ม in · ชีตไม่มีรายการเว้นว่างได้ ระบบถือว่ายอดเป็น 0</p>
           <button onclick="clearBranchCheckWorkbook()" class="border rounded-lg p-2 text-sm">ล้างไฟล์ที่อัปโหลด</button>
         </div>
@@ -2346,11 +2351,11 @@
   <script src="ponn-template.js"></script>
   <script src="supabase-config.js"></script>
   <script src="workflow.js?v=20261026-clear-preview"></script>
-  <script src="count-units.js?v=20261026-master"></script>
+  <script src="count-units.js?v=20261030-tab-order"></script>
   <script src="supabase-store.js?v=20261026-branches"></script>
   <script src="data-cleanup.js?v=20261023-dialog"></script>
   <script src="data-restore.js?v=20261023-dialog"></script>
-  <script src="branch-check.js?v=20261026-branches"></script>
+  <script src="branch-check.js?v=20261030-file-name"></script>
   <script src="stock-overview.js?v=20261026-black-grid"></script>
   <script src="critical-layout.js?v=20261025"></script>
   <dialog id="materialMasterDialog" class="ponn-dialog" aria-label="แก้ไขข้อมูลวัตถุดิบหลัก" oncancel="if(masterSaving)event.preventDefault()">

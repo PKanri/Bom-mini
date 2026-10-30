@@ -2,8 +2,22 @@
 'use strict';
 const branchCheckLabels={SALES:'ยอดขาย',STOCK_IN:'itec in',STOCK_OUT:'itec out',EXTRA_IN:'เครื่องดื่ม in'};
 let branchCheckState={scope:'',files:{},counts:{},rows:[],generation:0};
+function handleBranchCountTab(event,field) {
+  if(field!=='actual'&&field!=='opening')return;
+  if(event.key!=='Tab'||event.ctrlKey||event.altKey||event.metaKey)return;
+  const inputs=Array.from($w('branchCheckBody').querySelectorAll(`input[data-branch-count="${field}"]`))
+    .filter(input=>!input.disabled&&input.getClientRects().length>0);
+  const index=inputs.indexOf(event.target);
+  if(index<0)return;
+  const next=inputs[index+(event.shiftKey?-1:1)];
+  if(!next)return;
+  event.preventDefault();
+  next.focus();
+}
 function resetBranchCheck() {
   branchCheckState={scope:'',files:{},counts:{},rows:[],generation:branchCheckState.generation+1};
+  if($w('branchWorkbookName'))$w('branchWorkbookName').textContent='ยังไม่ได้เลือกไฟล์';
+  if($w('branchWorkbookInput'))$w('branchWorkbookInput').value='';
   if($w('branchSaveStatus'))$w('branchSaveStatus').textContent='';
   const body=$w('branchCheckBody');if(body)body.innerHTML='';
   if($w('branchCheckSummary'))$w('branchCheckSummary').textContent='';
@@ -50,20 +64,20 @@ function parseBranchCheckFile(book,type,scope,allowUnscoped=false,allowEmpty=fal
     // Templates may have formatting extending to XFD. Only source columns matter.
     range.e.c=Math.min(range.e.c,79);
     const grid=XLSX.utils.sheet_to_json(sheet,{header:1,defval:null,raw:true,range});
-    const index=grid.slice(0,10).findIndex(row=>{const r=row.map(v=>String(v??'').trim());return r.includes('Product (Code)')&&r.includes(type==='STOCK_IN'&&r.includes('Branch To (ID)')&&!r.includes('BranchFrom (ID)')?'Sum Number':sourceQuantityField(type));});
+    const index=grid.slice(0,10).findIndex(row=>{const r=row.map(v=>String(v??'').trim());return r.includes('Product (Code)')&&r.includes(sourceQuantityField(type));});
     if(index<0)continue;
     const headers=grid[index].map(v=>String(v??'').trim());
     const marker=type==='STOCK_OUT'?'Branch To (ID)':type==='STOCK_IN'?'BranchFrom (ID)':type==='SALES'?'ราคาขาย/หน่วย':'Supplier (Name)';
-    if(name!==preferred && !headers.includes(marker) && !(type==='STOCK_IN'&&headers.includes('Branch To (ID)')))continue;
+    if(name!==preferred && !headers.includes(marker))continue;
     candidates.push({name,headers,grid:grid.slice(index+1),offset:range.s.r+index+2,columnOffset:range.s.c});
   }
   const matches=candidates.filter(c=>c.name===preferred);
   const chosen=matches.length?matches:candidates;
   if(chosen.length!==1)throw Error(chosen.length?'พบหลายตาราง กรุณาใช้ไฟล์ประเภทเดียว':'ไม่พบตาราง '+branchCheckLabels[type]+' ที่มีคอลัมน์ '+sourceQuantityField(type));
   const {name,headers,grid,offset,columnOffset}=chosen[0],rows=[],detailRows=[];
-  if(type==='STOCK_IN' && !headers.includes('BranchFrom (ID)') && !headers.includes('Branch To (ID)'))
-    throw Error('ไฟล์ itec in ต้องมี BranchFrom (ID) หรือ Branch To (ID)');
-  const quantityField=type==='STOCK_IN'&&headers.includes('Branch To (ID)')&&!headers.includes('BranchFrom (ID)')?'Sum Number':sourceQuantityField(type);
+  if(type==='STOCK_IN' && !headers.includes('BranchFrom (ID)'))
+    throw Error('ไฟล์ itec in ต้องมี BranchFrom (ID) ตามรายงานรับเข้า พร้อม Product (Code) และ Number');
+  const quantityField=sourceQuantityField(type);
   if(type==='STOCK_OUT' && !headers.includes('Branch To (ID)'))throw Error('ไฟล์จ่ายออกต้องมี Branch To (ID)');
   // Branch sales summaries omit branch/date on every row. The selected scope
   // owns such a file; mixed scoped/unscoped exports still require confirmation.
@@ -122,6 +136,7 @@ async function loadBranchCheckWorkbook(input) {
     if(generation!==branchCheckState.generation||branchCheckState.workbookRead!==token||scope.key!==branchCheckScope().key)return;
     const parsed=parseBranchCheckWorkbook(book,scope,$w('branchCheckUnscoped').checked);
     branchCheckState.files=Object.fromEntries(Object.entries(parsed.files).map(([type,value])=>[type,{...value,file:file.name}]));
+    $w('branchWorkbookName').textContent=file.name;
     branchCheckState.reads={};branchCheckState.detailPage=0;
     $w('branchFileDetailSearch').value='';$w('branchFileDetailType').value='SALES';
     $w('branchCheckMessage').textContent='อ่าน '+file.name+' แล้ว · ชีตว่างถือว่าไม่มีรายการ · ใช้วันที่ '+scope.date+(parsed.warnings.length?' · '+parsed.warnings.join(' / '):'');
@@ -129,6 +144,8 @@ async function loadBranchCheckWorkbook(input) {
   }catch(e){$w('branchCheckMessage').textContent=e.message;}finally{input.value='';}
 }
 function clearBranchCheckWorkbook() {
+  $w('branchWorkbookName').textContent='ยังไม่ได้เลือกไฟล์';
+  $w('branchWorkbookInput').value='';
   branchCheckState.workbookRead=null;branchCheckState.reads={};branchCheckState.files={};
   $w('branchCheckMessage').textContent='ล้างไฟล์แล้ว กรุณาเลือกไฟล์ใหม่';renderBranchCheck();
 }
@@ -236,7 +253,7 @@ function renderBranchCheck() {
       const inputs=field=>{
         const specs=field==='waste'?[{label:s.unit,factor:1}]:units;
         const values=branchCheckState.counts[code]?.[field]??branchCheckValues(scope,code,s,field);
-        return specs.map((u,part)=>`<label class="bc-count">${esc(u.label)}<input aria-label="${esc(s.name+' '+field+' '+u.label)}" type="number" min="0" step="any" placeholder="${field==='waste'?'0':'ยังไม่นับ'}" value="${esc(values[part]??'')}" oninput="branchCheckInput(${index},'${field}',${part},this.value)"></label>`).join('');
+        return specs.map((u,part)=>`<label class="bc-count">${esc(u.label)}<input ${field==='actual'||field==='opening'?`data-branch-count="${field}" onkeydown="handleBranchCountTab(event,'${field}')"`:''} aria-label="${esc(s.name+' '+field+' '+u.label)}" type="number" min="0" step="any" placeholder="${field==='waste'?'0':'ยังไม่นับ'}" value="${esc(values[part]??'')}" oninput="branchCheckInput(${index},'${field}',${part},this.value)"></label>`).join('');
       };
       return `<tr><td><strong>${esc(s.name)}</strong><small>${esc(code)} · รายงานเป็น ${esc(s.unit)}</small></td><td>${inputs('opening')}</td><td id="bc-in-${index}" data-result></td><td id="bc-out-${index}" data-result></td><td id="bc-bom-${index}" data-result></td><td>${inputs('waste')}</td><td id="bc-theory-${index}" data-result></td><td>${inputs('actual')}</td><td id="bc-diff-${index}" data-result></td></tr>`;
     }).join('');
