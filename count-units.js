@@ -86,6 +86,17 @@ function rememberCountDraft() {
   });
   countDrafts[activeCountScope]=draft;
 }
+function handleCountUnitTab(event) {
+  if(event.key!=='Tab'||event.ctrlKey||event.altKey||event.metaKey)return;
+  const inputs=Array.from($w('stockCountTableBody').querySelectorAll('input[id^="count-unit-"]'))
+    .filter(input=>!input.disabled&&input.getClientRects().length>0);
+  const index=inputs.indexOf(event.target);
+  if(index<0)return;
+  const next=inputs[index+(event.shiftKey?-1:1)];
+  if(!next)return;
+  event.preventDefault();
+  next.focus();
+}
 function updateCountTotal(index) {
   rememberCountDraft();
   const code=activeCountCodes[index], c=countDrafts[activeCountScope][code];
@@ -116,7 +127,7 @@ function renderStockCountTable() {
     const loss=c.unitInputs?c.loss??'':c.waste!=null?c.waste/lossFactor:c.loss!=null?Number(c.loss)/(s.countDivisor||1)/lossFactor:'';
     const total=values.some(v=>v!=='')?values.reduce((sum,v,j)=>sum+Number(v)*units[j].factor,0):null;
     return `<tr data-count-code="${esc(code)}"><td class="p-3"><strong style="display:block;font-size:16px;font-weight:700;line-height:1.5">${esc(s.name)}</strong><small>${esc(code)}</small>${count?.unitReview?'<p class="text-amber-700">ยอดเดิมต่างหน่วย กรุณาตรวจนับใหม่</p>':''}</td>
-      ${[0,1].map(j=>{const u=units[j];return u?`<td class="p-3"><label class="text-xs font-semibold">${esc(u.label)}<input id="count-unit-${i}-${j}" type="number" inputmode="decimal" min="0" step="any" value="${esc(values[j])}" oninput="updateCountTotal(${i})" placeholder="จำนวน${esc(u.label)}" aria-label="คงเหลือ ${esc(s.name)} หน่วย ${esc(u.label)}" class="block border rounded-lg p-2 w-28 mt-1" ${!branch?'disabled':''}></label></td>`:'<td class="p-3 text-slate-400"><input disabled placeholder="– ไม่มีเศษ" class="border rounded-lg p-2 w-28 bg-slate-100"></td>';}).join('')}
+      ${[0,1].map(j=>{const u=units[j];return u?`<td class="p-3"><label class="text-xs font-semibold">${esc(u.label)}<input id="count-unit-${i}-${j}" type="number" inputmode="decimal" min="0" step="any" value="${esc(values[j])}" oninput="updateCountTotal(${i})" onkeydown="handleCountUnitTab(event)" placeholder="จำนวน${esc(u.label)}" aria-label="คงเหลือ ${esc(s.name)} หน่วย ${esc(u.label)}" class="block border rounded-lg p-2 w-28 mt-1" ${!branch?'disabled':''}></label></td>`:'<td class="p-3 text-slate-400"><input disabled placeholder="– ไม่มีเศษ" class="border rounded-lg p-2 w-28 bg-slate-100"></td>';}).join('')}
       <td id="count-total-${i}" class="p-3 text-emerald-700 font-semibold">${total==null?'ยังไม่ได้นับ':fmt(total/units[0].factor)+' '+esc(units[0].label)}</td>
       <td class="p-3"><input id="count-loss-${i}" type="number" inputmode="decimal" min="0" step="any" value="${esc(loss)}" oninput="rememberCountDraft()" placeholder="จำนวนสูญเสีย" class="border rounded-lg p-2 w-24" ${!branch?'disabled':''}><select id="count-loss-unit-${i}" onchange="rememberCountDraft()" class="border rounded-lg p-2" ${!branch?'disabled':''}>${units.map(u=>`<option value="${esc(u.label)}" ${u.label===savedLossUnit?'selected':''}>${esc(u.label)}</option>`).join('')}</select></td>
       <td class="p-3"><input id="count-note-${i}" value="${esc(c.remarks||'')}" oninput="rememberCountDraft()" placeholder="หมายเหตุ" class="border rounded-lg p-2" ${!branch?'disabled':''}></td></tr>`;
