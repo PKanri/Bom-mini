@@ -217,6 +217,7 @@
           </p>
         </div>
         <div class="flex flex-wrap items-center gap-2">
+          <button type="button" onclick="exportBomRecipes()" class="bg-slate-800 hover:bg-slate-700 text-white rounded-xl px-4 py-2 text-sm font-semibold">📑 ส่งออกสูตร BOM</button>
           <button type="button" onclick="showNewMaterialMaster()" class="border border-emerald-300 text-emerald-700 rounded-xl px-4 py-2 text-sm hover:bg-emerald-50">เพิ่มวัตถุดิบหลัก</button>
           <button type="button" onclick="showMaterialMaster()" class="border border-slate-300 rounded-xl px-4 py-2 text-sm">แก้ไขข้อมูลวัตถุดิบหลัก</button>
           <button onclick="showAddRecipeModal()" class="bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-xl text-xs font-semibold shadow-xs flex items-center gap-1.5 transition-colors">
@@ -342,6 +343,17 @@
               <span class="font-bold">ปริมาณต่อจานและ Yield:</span>
               หากวัตถุดิบมีการสูญเสียจากการแล่หรือตัดแต่ง เช่น เนื้อปลาสดที่มี Yield 80% การใส่ชิ้นปลาเสิร์ฟ 200g จะต้องคำนวณเบิกเนื้อปลาดิบจริง 250g ($200 \div 0.8$) ใช้ปริมาณเบิกจริงต่อจานคูณจำนวนจานที่ขาย เพื่อเทียบกับปริมาณใช้จริงของสาขา
             </div>
+          </div>
+        </div>
+      </div>
+      <div class="bg-white border border-slate-200 rounded-2xl p-5">
+        <h3 class="font-bold mb-4">ค้นหาเมนูที่ใช้วัตถุดิบ</h3>
+        <div class="grid md:grid-cols-3 gap-5">
+          <div><label for="materialUsageSelect" class="block text-sm font-semibold mb-2">เลือกวัตถุดิบหลัก</label>
+            <select id="materialUsageSelect" onchange="renderMaterialUsageMenus()" class="w-full border border-slate-200 rounded-xl p-3 text-sm"></select>
+          </div>
+          <div class="md:col-span-2"><p id="materialUsageSummary" class="font-semibold mb-3" aria-live="polite"></p>
+            <div class="overflow-x-auto"><table class="w-full text-left text-sm"><thead class="bg-slate-50"><tr><th class="p-3">รหัสเมนู</th><th class="p-3">ชื่อเมนู</th></tr></thead><tbody id="materialUsageBody" class="divide-y divide-slate-100"></tbody></table></div>
           </div>
         </div>
       </div>
@@ -1145,7 +1157,52 @@
     }
 
     // 3. MODULE 1: BOM LOGIC & RENDERING
+    function exportBomRecipes() {
+      if(!appState.recipes.length){appAlert('ยังไม่มีสูตร BOM ให้ส่งออก');return;}
+      if(typeof XLSX==='undefined'){appAlert('ไม่พบตัวส่งออก Excel กรุณารีเฟรชหน้าเว็บ');return;}
+      const rows=[['รหัสเมนู','ชื่อเมนู','รหัสวัตถุดิบ','ชื่อวัตถุดิบ','ปริมาณสุทธิต่อจาน','หน่วย','Yield (%)','ปริมาณเบิกจริงต่อจาน','หมายเหตุ']];
+      const materials=new Map(appState.materials.map(m=>[m.id,m]));
+      appState.recipes.forEach(recipe=>{
+        if(!recipe.items.length){rows.push([recipe.menuCode,recipe.menuName,'','','','','','','ยังไม่มีวัตถุดิบในสูตร']);return;}
+        recipe.items.forEach(item=>{
+          const mat=materials.get(item.materialId);
+          const valid=Number.isFinite(item.netQty)&&Number.isFinite(item.yieldRate)&&item.yieldRate>0&&item.yieldRate<=100;
+          rows.push([recipe.menuCode,recipe.menuName,mat?.code||'',mat?.name||'',item.netQty,item.unitReview||mat?.baseUnit||'',item.yieldRate,valid?item.netQty/(item.yieldRate/100):null,!mat?'ไม่พบวัตถุดิบใน Master Data':item.unitReview?'ต้องตรวจหน่วยใหม่':!valid?'ตรวจสอบปริมาณหรือ Yield':'']);
+        });
+      });
+      const sheet=XLSX.utils.aoa_to_sheet(rows);
+      sheet['!cols']=[{wch:18},{wch:48},{wch:18},{wch:48},{wch:24},{wch:25},{wch:12},{wch:26},{wch:32}];
+      sheet['!autofilter']={ref:sheet['!ref']};
+      for(let r=1;r<rows.length;r++)for(const c of [4,6,7]){
+        const cell=sheet[XLSX.utils.encode_cell({r,c})];
+        if(cell?.t==='n')cell.z='0.################';
+      }
+      const book=XLSX.utils.book_new();XLSX.utils.book_append_sheet(book,sheet,'สูตร BOM');
+      const now=new Date(),date=[now.getFullYear(),String(now.getMonth()+1).padStart(2,'0'),String(now.getDate()).padStart(2,'0')].join('-');
+      XLSX.writeFile(book,'สูตร_BOM_'+date+'.xlsx');
+    }
+    function renderMaterialUsageSelector() {
+      const select=document.getElementById('materialUsageSelect');
+      const previous=select.value;
+      select.replaceChildren(new Option('เลือกวัตถุดิบหลัก', ''));
+      appState.materials.forEach(m=>select.add(new Option(m.code+' · '+m.name,m.id)));
+      select.value=appState.materials.some(m=>m.id===previous)?previous:'';
+      renderMaterialUsageMenus();
+    }
+    function renderMaterialUsageMenus() {
+      const id=document.getElementById('materialUsageSelect').value;
+      const rows=appState.recipes.filter(r=>r.items.some(item=>item.materialId===id));
+      const body=document.getElementById('materialUsageBody');body.replaceChildren();
+      document.getElementById('materialUsageSummary').textContent=id?'เมนูที่ใช้วัตถุดิบนี้ '+rows.length+' เมนู':'เลือกวัตถุดิบเพื่อดูเมนูที่ใช้ในสูตร BOM';
+      rows.forEach(r=>{
+        const tr=document.createElement('tr');
+        [r.menuCode,r.menuName].forEach(value=>{const td=document.createElement('td');td.className='p-3';td.textContent=value;tr.appendChild(td);});
+        body.appendChild(tr);
+      });
+      if(id&&!rows.length){const tr=document.createElement('tr'),td=document.createElement('td');td.colSpan=2;td.className='p-3 text-slate-500';td.textContent='ยังไม่มีเมนูที่ใช้วัตถุดิบนี้ในสูตร BOM';tr.appendChild(td);body.appendChild(tr);}
+    }
     function renderBomModule() {
+      renderMaterialUsageSelector();
       const container = document.getElementById('menuCardsContainer');
       const query=document.getElementById('menuSearch')?.value||'';
       const previousScroll=container.dataset.search===query?container.scrollTop:0;
@@ -1216,13 +1273,13 @@
             <div class="font-bold text-slate-800">${mat.name}</div>
             <div class="text-slate-400 font-mono">${mat.code} (${mat.baseUnit})</div>
           </td>
-          <td class="p-3 text-right font-medium">${item.netQty.toLocaleString()} ${item.unitReview || mat.baseUnit}${item.unitReview ? " (ต้องตรวจหน่วยใหม่)" : ""}</td>
+          <td class="p-3 text-right font-medium">${String(item.netQty)} ${item.unitReview || mat.baseUnit}${item.unitReview ? " (ต้องตรวจหน่วยใหม่)" : ""}</td>
           <td class="p-3 text-center">
             <span class="px-2 py-0.5 rounded-md font-bold ${item.yieldRate < 100 ? 'bg-amber-100 text-amber-800' : 'bg-slate-100 text-slate-700'}">
               ${item.yieldRate}%
             </span>
           </td>
-          <td class="p-3 text-right font-bold text-slate-900">${grossQty.toFixed(1)} ${mat.baseUnit}</td>
+          <td class="p-3 text-right font-bold text-slate-900">${String(grossQty)} ${mat.baseUnit}</td>
           <td class="p-3 text-center">
             <button type="button" class="edit-recipe-item text-slate-600 hover:text-emerald-700 hover:bg-emerald-50 p-1 rounded-lg text-xs font-bold" title="แก้ไขปริมาณและ Yield">แก้ไข</button>
             <button type="button" onclick="deleteIngredientFromRecipe('${item.materialId}')" title="ลบออกจากสูตร" class="text-rose-500 hover:text-rose-700 hover:bg-rose-50 p-1 rounded-lg transition-colors text-xs font-bold cursor-pointer">
@@ -1298,7 +1355,7 @@
 
 
 
-      if (grossEl) grossEl.textContent = `${grossQty.toFixed(1)} ${mat.baseUnit}`;
+      if (grossEl) grossEl.textContent = `${String(grossQty)} ${mat.baseUnit}`;
     }
 
     // บันทึกเพิ่มวัตถุดิบเข้าสู่สูตรของเมนูนี้
@@ -2350,7 +2407,7 @@
   <script src="vendor/xlsx.full.min.js"></script>
   <script src="ponn-template.js"></script>
   <script src="supabase-config.js"></script>
-  <script src="workflow.js?v=20261026-clear-preview"></script>
+  <script src="workflow.js?v=20261102-hide-bom-reason"></script>
   <script src="count-units.js?v=20261030-tab-order"></script>
   <script src="supabase-store.js?v=20261026-branches"></script>
   <script src="data-cleanup.js?v=20261023-dialog"></script>

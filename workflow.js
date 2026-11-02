@@ -207,9 +207,32 @@ async function commitImportData(){
     $w('excelFileInput').disabled=false;
   }
 }
+async function deleteSavedImport(key) {
+  if(!workflowReady||bomCloud.member?.role!=='admin'||adminImportSaving)return;
+  const source=workflow,batch=source.batches[key];
+  if(!batch)return;
+  adminImportSaving=true;
+  renderImportHistory();
+  let removed=false;
+  try {
+    const confirmed=await appConfirm(`ลบข้อมูลที่บันทึกจากไฟล์ ${batch.file}?\nประเภท: ${labels[batch.type]}\nวันที่ ${batch.start} ถึง ${batch.end} · ${batch.branches.length} สาขา\nลบเฉพาะข้อมูลชุดนี้ ยอดนับที่สาขาบันทึก สูตร BOM และข้อมูลชุดอื่นจะยังอยู่`);
+    if(!confirmed||workflow!==source||source.batches[key]!==batch||bomCloud.member?.role!=='admin')return;
+    delete source.batches[key];removed=true;
+    try { await storeWorkflow(); }
+    catch(error) { source.batches[key]=batch;removed=false;throw error; }
+    if(typeof renderVarianceDashboard==='function')renderVarianceDashboard();
+    appAlert('ลบข้อมูลจากไฟล์ '+batch.file+' ('+labels[batch.type]+') แล้ว');
+  } catch(error) {
+    if(!removed)storageError(error);
+    else appAlert('ลบข้อมูลแล้ว กรุณาเปิดหน้ารายงานใหม่');
+  } finally {
+    adminImportSaving=false;
+    renderImportHistory();
+  }
+}
 function renderImportHistory() {
   renderMissingImportBom();
-  $w('importHistory').innerHTML = Object.values(workflow.batches).map(b=>`<li>${esc(labels[b.type])} · ${esc(b.file)} · ${b.start} ถึง ${b.end} · ${b.branches.length} สาขา · ${fmt(b.sourceRows)} แถว</li>`).join('') || '<li>ยังไม่มีไฟล์ส่วนกลางที่บันทึก</li>';
+  $w('importHistory').innerHTML = Object.entries(workflow.batches).map(([key,b])=>`<li class="flex items-start justify-between gap-2"><span>${esc(labels[b.type])} · ${esc(b.file)} · ${esc(b.start)} ถึง ${esc(b.end)} · ${b.branches.length} สาขา · ${fmt(b.sourceRows)} แถว</span>${bomCloud.member?.role==='admin'?`<button type="button" data-batch-key="${esc(key)}" onclick="deleteSavedImport(this.dataset.batchKey)" class="shrink-0 border border-rose-200 text-rose-600 rounded-lg px-3 py-1 hover:bg-rose-50" ${adminImportSaving?'disabled':''}>ลบ</button>`:''}</li>`).join('') || '<li>ยังไม่มีไฟล์ส่วนกลางที่บันทึก</li>';
   if(typeof refreshCleanupPeriods==='function')refreshCleanupPeriods();
 }
 function refreshWorkflowSelectors() {
@@ -676,19 +699,39 @@ function missingImportBomRows(rows,recipes){
   }
   return [...missing.values()].sort((a,b)=>a.code.localeCompare(b.code,undefined,{numeric:true}));
 }
+let dismissMissingBomBusy=false;
+async function dismissMissingImportBom(code,button){
+  if(!workflowReady||bomCloud.member?.role!=='admin'||dismissMissingBomBusy||!code)return;
+  const source=workflow,previous=source.dismissedMissingBomCodes;
+  if((previous||[]).includes(code))return;
+  dismissMissingBomBusy=true;
+  if(button)button.disabled=true;
+  try {
+    source.dismissedMissingBomCodes=[...(previous||[]),code];
+    try {await storeWorkflow();}
+    catch(error){
+      if(previous===undefined)delete source.dismissedMissingBomCodes;
+      else source.dismissedMissingBomCodes=previous;
+      throw error;
+    }
+    renderMissingImportBom();
+  }catch(error){storageError(error);}
+  finally{dismissMissingBomBusy=false;if(button)button.disabled=false;}
+}
 function renderMissingImportBom(){
   const panel=$w('missingImportBomPanel');if(!panel)return;
   const preview=importPreview?.combined?importPreview.parts.find(p=>p.type==='SALES'&&p.rows.length):(importPreview?.type==='SALES'?importPreview:null);
   const batches=Object.values(workflow.batches||{}).filter(b=>b.type==='SALES');
   const rows=preview?preview.rows:batches.flatMap(b=>b.rows||[]);
   panel.hidden=!preview&&!batches.length;
-  const missing=missingImportBomRows(rows,appState.recipes);
+  const dismissed=new Set(workflow.dismissedMissingBomCodes||[]);
+  const missing=missingImportBomRows(rows,appState.recipes).filter(r=>!dismissed.has(r.code));
   const newCodes=preview?newImportMenuCodes(rows,appState.recipes,workflow.batches):new Set(rows.filter(r=>r.newMenu).map(r=>r.code));
   $w('missingImportBomSummary').textContent=(preview?'ไฟล์ที่กำลังตรวจ: '+preview.file:'ยอดขายส่วนกลางที่บันทึกแล้วทั้งหมด')+' · พบสินค้าที่ยังไม่มีสูตร '+missing.length+' รายการ (รวมรหัสซ้ำแล้ว)';
   const query=($w('missingImportBomSearch')?.value||'').trim().toLocaleLowerCase();
   const filtered=missing.filter(r=>(r.code+' '+r.name).toLocaleLowerCase().includes(query));
   $w('missingImportBomSummary').textContent+=' · แสดง '+filtered.length+' รายการ';
-  $w('missingImportBomBody').innerHTML=filtered.map(r=>`<tr><td class="p-3">${esc(r.code)}</td><td class="p-3 font-semibold">${esc(r.name)}${newCodes.has(r.code)?'<span style="display:inline-block;margin-left:8px;padding:3px 9px;border-radius:999px;background:#dcfce7;color:#166534;font-size:12px;font-weight:700">เมนูใหม่</span>':''}</td><td class="p-3">${esc(r.reason)} <button type="button" data-code="${esc(r.code)}" data-name="${esc(r.name)}" onclick="addBomFromImport(this.dataset.code,this.dataset.name,this)" class="ml-2 border border-emerald-300 text-emerald-700 rounded-lg px-3 py-2 whitespace-nowrap">เพิ่มสูตร</button></td></tr>`).join('')||`<tr><td colspan="3" class="p-3">${missing.length?'ไม่พบรหัสหรือชื่อที่ค้นหา':'สินค้าทุกรหัสมีสูตร BOM แล้ว'}</td></tr>`;
+  $w('missingImportBomBody').innerHTML=filtered.map(r=>`<tr><td class="p-3">${esc(r.code)}</td><td class="p-3 font-semibold">${esc(r.name)}${newCodes.has(r.code)?'<span style="display:inline-block;margin-left:8px;padding:3px 9px;border-radius:999px;background:#dcfce7;color:#166534;font-size:12px;font-weight:700">เมนูใหม่</span>':''}</td><td class="p-3"><button type="button" data-code="${esc(r.code)}" data-name="${esc(r.name)}" onclick="addBomFromImport(this.dataset.code,this.dataset.name,this)" class="ml-2 border border-emerald-300 text-emerald-700 rounded-lg px-3 py-2 whitespace-nowrap">เพิ่มสูตร</button>${bomCloud.member?.role==='admin'?` <button type="button" data-code="${esc(r.code)}" onclick="dismissMissingImportBom(this.dataset.code,this)" class="ml-2 border border-rose-200 text-rose-600 rounded-lg px-3 py-2 whitespace-nowrap" title="ตรวจแล้ว ไม่แสดงรหัสนี้อีก โดยคงข้อมูลยอดขายไว้">ลบจากรายการ</button>`:''}</td></tr>`).join('')||`<tr><td colspan="3" class="p-3">${missing.length?'ไม่พบรหัสหรือชื่อที่ค้นหา':'ไม่มีสินค้าที่ยังรอตรวจสูตร BOM (ไม่รวมรายการที่กดลบแล้ว)'}</td></tr>`;
 }
 
 function compareBranchIds(a,b){
