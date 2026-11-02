@@ -350,6 +350,34 @@ async function saveCriticalProduct() {
   try { await storeWorkflow(); renderCriticalSettings(); renderBomModule(); } catch(error) {workflow=before;appState.materials=materialsBefore;storageError(error);}
 }
 function criticalEntries() {return Object.entries(workflow.settings).filter(([,s])=>s.critical);}
+function recipeUnits(mat){
+  if(!mat)return [];
+  const setting=workflow.settings[mat.code];
+  const units=setting?countUnits(setting,mat.code):[{label:mat.baseUnit,factor:1},...(mat.subUnit&&mat.subUnit!==mat.baseUnit?[{label:mat.subUnit,factor:mat.subFactor}]:[])];
+  return units.filter(u=>u.label&&Number.isFinite(u.factor)&&u.factor>0);
+}
+function fillRecipeUnits(id,mat,label){
+  const select=$w(id),units=recipeUnits(mat);
+  select.innerHTML=units.map((u,i)=>`<option value="${i}">${esc(u.label)}</option>`).join('');
+  select.value=String(Math.max(0,units.findIndex(u=>u.label===label)));
+  select.dataset.factor=String(units[Number(select.value)]?.factor||1);
+}
+function chosenRecipeUnit(id,mat){return recipeUnits(mat)[Number($w(id).value)]||{label:mat.baseUnit,factor:1};}
+function changeRecipeUnit(selectId,qtyId){
+  const mat=appState.materials.find(m=>m.id===(selectId==='editRecipeUnit'?editingMaterialId:$w('ingredientSelectInput').value));
+  if(!mat)return;
+  const select=$w(selectId),input=$w(qtyId),next=chosenRecipeUnit(selectId,mat);
+  if(input.value!=='')input.value=Number(input.value)*Number(select.dataset.factor||1)/next.factor;
+  select.dataset.factor=String(next.factor);
+  if(selectId!=='editRecipeUnit')updateAddEstimate();
+}
+function recipeQuantityText(item,mat,gross=false){
+  if(item.unitReview)return esc(String(item.netQty)+' '+item.unitReview+' (ต้องตรวจหน่วยใหม่)');
+  const units=recipeUnits(mat);
+  const unit=units.find(u=>u.label===item.recipeUnit)||units[units.length-1]||{label:mat.baseUnit,factor:1};
+  const qty=item.netQty/unit.factor/(gross?item.yieldRate/100:1);
+  return esc(qty.toLocaleString('th-TH',{maximumFractionDigits:8})+' '+unit.label);
+}
 let editingMaterialId = null;
 let editingRecipeId = null;
 let materialEditSaving = false;
@@ -369,7 +397,8 @@ function openSelectedMaterialEditor(materialId = $w('ingredientSelectInput').val
   editingRecipeId = recipe.menuId;
   const item = recipe.items.find(i => i.materialId === mat.id);
   $w('editMaterialRecipe').textContent = `ปริมาณสำหรับเมนู: ${recipe.menuName} (ต่อ 1 จาน)`;
-  $w('editMaterialQty').value = item?.netQty ?? '';
+  fillRecipeUnits('editRecipeUnit',mat,item?.recipeUnit||mat.baseUnit);
+  $w('editMaterialQty').value = item?item.netQty/chosenRecipeUnit('editRecipeUnit',mat).factor:'';
   $w('editMaterialYield').value = item?.yieldRate ?? 100;
   const locks = materialEditLocks(mat);
   for (const [id, value] of [['editMaterialCode',mat.code],['editMaterialName',mat.name],['editMaterialUnit',mat.baseUnit]]) $w(id).value = value;
@@ -392,7 +421,8 @@ async function saveSelectedMaterial() {
   if (!mat) return;
   const code = $w('editMaterialCode').value.trim(), name = $w('editMaterialName').value.trim(), unit = $w('editMaterialUnit').value.trim();
   const recipe = appState.recipes.find(r => r.menuId === editingRecipeId);
-  const qty = Number($w('editMaterialQty').value), yieldRate = Number($w('editMaterialYield').value);
+  const entryUnit=chosenRecipeUnit('editRecipeUnit',mat);
+  const qty = Number($w('editMaterialQty').value)*entryUnit.factor, yieldRate = Number($w('editMaterialYield').value);
   const fail = text => { $w('editMaterialError').textContent = text; };
   if (!recipe || !code || !name || !unit || !Number.isFinite(qty) || qty <= 0 || !Number.isFinite(yieldRate) || yieldRate <= 0 || yieldRate > 100) { fail('กรอกปริมาณต่อจานมากกว่า 0 และ Yield มากกว่า 0 ถึง 100% ให้ครบ'); return; }
   if (appState.materials.some(m => m.id !== mat.id && m.code === code) || (code !== mat.code && (sourceCatalog().has(code) || workflow.settings[code]))) { fail('รหัสนี้มีอยู่แล้ว กรุณาใช้รหัสอื่น'); return; }
@@ -401,8 +431,8 @@ async function saveSelectedMaterial() {
   const before = structuredClone(mat), settingBefore = structuredClone(workflow.settings[mat.code] || null);
   const itemsBefore = structuredClone(recipe.items);
   const item = recipe.items.find(i => i.materialId === mat.id);
-  if (item) {Object.assign(item, { netQty: qty, yieldRate });delete item.unitReview;}
-  else recipe.items.push({ materialId: mat.id, netQty: qty, yieldRate });
+  if (item) {Object.assign(item, { netQty: qty, yieldRate, recipeUnit:entryUnit.label });delete item.unitReview;}
+  else recipe.items.push({ materialId: mat.id, netQty: qty, yieldRate, recipeUnit:entryUnit.label });
   Object.assign(mat, { code, name, baseUnit: unit });
   if (before.baseUnit !== unit) Object.assign(mat, { mainUnit: unit, subUnit: unit, mainFactor: 1, subFactor: 1 });
   if (workflow.settings[code]) Object.assign(workflow.settings[code], { name });

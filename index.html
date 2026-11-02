@@ -311,9 +311,7 @@
               <!-- Field 3: หน่วยเป็น... -->
               <div class="lg:col-span-2 space-y-1">
                 <label class="block text-xs font-bold text-slate-700">3. หน่วยเป็น:</label>
-                <div id="ingredientUnitBadge" class="w-full bg-slate-200/80 border border-slate-300 rounded-xl p-2.5 text-xs font-bold text-slate-800 text-center">
-                  กรัม (g)
-                </div>
+                <select id="ingredientUnitBadge" onchange="changeRecipeUnit('ingredientUnitBadge','ingredientQtyInput')" class="w-full bg-white border border-slate-300 rounded-xl p-2.5 text-xs font-bold text-slate-800"><option>เลือกวัตถุดิบ</option></select>
               </div>
 
               <!-- Field 4: Yield % -->
@@ -1273,13 +1271,13 @@
             <div class="font-bold text-slate-800">${mat.name}</div>
             <div class="text-slate-400 font-mono">${mat.code} (${mat.baseUnit})</div>
           </td>
-          <td class="p-3 text-right font-medium">${String(item.netQty)} ${item.unitReview || mat.baseUnit}${item.unitReview ? " (ต้องตรวจหน่วยใหม่)" : ""}</td>
+          <td class="p-3 text-right font-medium">${recipeQuantityText(item,mat)}</td>
           <td class="p-3 text-center">
             <span class="px-2 py-0.5 rounded-md font-bold ${item.yieldRate < 100 ? 'bg-amber-100 text-amber-800' : 'bg-slate-100 text-slate-700'}">
               ${item.yieldRate}%
             </span>
           </td>
-          <td class="p-3 text-right font-bold text-slate-900">${String(grossQty)} ${mat.baseUnit}</td>
+          <td class="p-3 text-right font-bold text-slate-900">${recipeQuantityText(item,mat,true)}</td>
           <td class="p-3 text-center">
             <button type="button" class="edit-recipe-item text-slate-600 hover:text-emerald-700 hover:bg-emerald-50 p-1 rounded-lg text-xs font-bold" title="แก้ไขปริมาณและ Yield">แก้ไข</button>
             <button type="button" onclick="deleteIngredientFromRecipe('${item.materialId}')" title="ลบออกจากสูตร" class="text-rose-500 hover:text-rose-700 hover:bg-rose-50 p-1 rounded-lg transition-colors text-xs font-bold cursor-pointer">
@@ -1335,7 +1333,8 @@
       const mat = appState.materials.find(m => m.id === materialId);
       if (!mat) {document.getElementById('ingredientUnitBadge').textContent='เลือกวัตถุดิบ';updateAddEstimate();return;}
       const unitBadge = document.getElementById('ingredientUnitBadge');
-      if (unitBadge) unitBadge.textContent = `${mat.baseUnit}`;
+      if (unitBadge) fillRecipeUnits('ingredientUnitBadge',mat,unitBadge.dataset.material===mat.id?chosenRecipeUnit('ingredientUnitBadge',mat).label:mat.baseUnit);
+      unitBadge.dataset.material=mat.id;
       updateAddEstimate();
     }
 
@@ -1355,7 +1354,7 @@
 
 
 
-      if (grossEl) grossEl.textContent = `${String(grossQty)} ${mat.baseUnit}`;
+      if (grossEl) grossEl.textContent = `${grossQty.toLocaleString('th-TH',{maximumFractionDigits:8})} ${chosenRecipeUnit('ingredientUnitBadge',mat).label}`;
     }
 
     // บันทึกเพิ่มวัตถุดิบเข้าสู่สูตรของเมนูนี้
@@ -1364,7 +1363,10 @@
       if (!recipe) return;
 
       const matId = document.getElementById('ingredientSelectInput')?.value;
-      const qty = parseFloat(document.getElementById('ingredientQtyInput')?.value);
+      const enteredQty = parseFloat(document.getElementById('ingredientQtyInput')?.value);
+      const entryMat=appState.materials.find(m=>m.id===matId);
+      const entryUnit=entryMat?chosenRecipeUnit('ingredientUnitBadge',entryMat):{factor:1,label:''};
+      const qty=enteredQty*entryUnit.factor;
       const yieldRate = parseFloat(document.getElementById('ingredientYieldInput')?.value) || 100;
 
       if (!matId) {
@@ -1382,9 +1384,10 @@
       // ตรวจสอบว่ามีวัตถุดิบนี้ในสูตรอยู่แล้วหรือไม่
       const existingIdx = recipe.items.findIndex(it => it.materialId === matId);
       if (existingIdx >= 0) {
-        const confirmUpdate = await appConfirm(`วัตถุดิบ "${mat.name}" มีอยู่ในสูตรนี้แล้ว ต้องการอัปเดตปริมาณเป็น ${qty} ${mat.baseUnit} (Yield ${yieldRate}%) หรือไม่?`);
+        const confirmUpdate = await appConfirm(`วัตถุดิบ "${mat.name}" มีอยู่ในสูตรนี้แล้ว ต้องการอัปเดตปริมาณเป็น ${enteredQty} ${entryUnit.label} (Yield ${yieldRate}%) หรือไม่?`);
         if (confirmUpdate) {
           recipe.items[existingIdx].netQty = qty;
+          recipe.items[existingIdx].recipeUnit = entryUnit.label;
           recipe.items[existingIdx].yieldRate = yieldRate;
           delete recipe.items[existingIdx].unitReview;
         } else {
@@ -1394,6 +1397,7 @@
         recipe.items.push({
           materialId: matId,
           netQty: qty,
+          recipeUnit: entryUnit.label,
           yieldRate: yieldRate
         });
       }
@@ -2394,7 +2398,8 @@
       <label class="block text-xs font-semibold">หน่วยฐาน<input id="editMaterialUnit" required class="block w-full border rounded-lg p-2 mt-1 read-only:bg-slate-100"></label>
       <p id="editMaterialUnitHint" class="text-xs text-slate-500"></p>
       <p id="editMaterialRecipe" class="text-sm font-semibold text-emerald-700"></p>
-      <label class="block text-xs font-semibold">ปริมาณสุทธิที่ใช้ต่อจาน (ตามหน่วยฐาน)<input id="editMaterialQty" type="number" min="0.000001" step="any" required class="block w-full border rounded-lg p-2 mt-1"></label>
+      <label class="block text-xs font-semibold">หน่วยที่กรอกในสูตร<select id="editRecipeUnit" onchange="changeRecipeUnit('editRecipeUnit','editMaterialQty')" class="block w-full border rounded-lg p-2 mt-1"></select></label>
+      <label class="block text-xs font-semibold">ปริมาณสุทธิที่ใช้ต่อจาน<input id="editMaterialQty" type="number" min="0.000001" step="any" required class="block w-full border rounded-lg p-2 mt-1"></label>
       <label class="block text-xs font-semibold">Yield (%)<input id="editMaterialYield" type="number" min="0.000001" max="100" step="any" required class="block w-full border rounded-lg p-2 mt-1"></label>
       <p class="text-xs bg-amber-50 p-3 rounded-lg">ตัวอย่าง: ใช้กุ้งสุทธิ 200 g ต่อจาน ถ้า Yield 80% ระบบจะคำนวณเบิกจริง 250 g ต่อจาน หากไม่มีการสูญเสียให้ใช้ Yield 100%</p>
       <p id="editMaterialError" role="alert" class="text-xs text-rose-600"></p>
@@ -2407,7 +2412,7 @@
   <script src="vendor/xlsx.full.min.js"></script>
   <script src="ponn-template.js"></script>
   <script src="supabase-config.js"></script>
-  <script src="workflow.js?v=20261102-hide-bom-reason"></script>
+  <script src="workflow.js?v=20261102-recipe-display"></script>
   <script src="count-units.js?v=20261030-tab-order"></script>
   <script src="supabase-store.js?v=20261026-branches"></script>
   <script src="data-cleanup.js?v=20261023-dialog"></script>
