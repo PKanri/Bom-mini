@@ -131,6 +131,10 @@ function parseAdminWorkbook(book,file){
     if(!grid.slice(1).some(row=>row.some(v=>v!=null&&String(v).trim()!==''))){parts.push({type,file,rows:[],errors:[],empty:true});continue;}
     const parsed=parseSourceWorkbook({SheetNames:found,Sheets:{[found[0]]:sheet}},type);
     errors.push(...parsed.errors.map(e=>label+': '+e));
+    const skippedRows=parsed.rows.filter(r=>!Object.hasOwn(workflow.branches,r.branch)||workflow.removedBranches?.[r.branch]);
+    parsed.rows=parsed.rows.filter(r=>Object.hasOwn(workflow.branches,r.branch)&&!workflow.removedBranches?.[r.branch]);
+    parsed.skippedBranches=[...new Set(skippedRows.map(r=>r.branch))];
+    parsed.skippedBranchRows=skippedRows.length;
     const dates=parsed.rows.map(r=>r.date).sort();
     parts.push({...parsed,type,file,quantityField:sourceQuantityField(type),start:dates[0],end:dates[dates.length-1]});
   }
@@ -165,13 +169,30 @@ async function handleFileSelected(event){
     const parsed=parseAdminWorkbook(XLSX.read(await file.arrayBuffer(),{type:'array'}),file.name);
     if(version!==importReadVersion)return;
     importPreview=parsed;
-    $w('importSummaryText').textContent=file.name+' · '+parsed.parts.map(p=>labels[p.type]+': '+p.rows.length+' แถว'+(p.empty?' (ว่าง ไม่แทนที่ข้อมูลเดิม)':'')).join(' · ');
+    $w('importSummaryText').textContent=file.name+' · '+parsed.parts.map(p=>labels[p.type]+': '+p.rows.length+' แถว'+(p.empty?' (ว่าง ไม่แทนที่ข้อมูลเดิม)':'')+(p.skippedBranchRows?' (ข้าม '+p.skippedBranchRows+' แถว: ไม่มีรหัสสาขา '+p.skippedBranches.join(', ')+' ในระบบ)':'')).join(' · ');
     $w('importStatusBadge').textContent=parsed.errors.length?'ตรวจพบข้อผิดพลาด':'พร้อมตรวจทาน';
     $w('validationErrorsBox').classList.toggle('hidden',!parsed.errors.length);
     $w('validationErrorsList').innerHTML=parsed.errors.slice(0,30).map(e=>'<li>'+esc(e)+'</li>').join('');
     $w('commitImportBtn').disabled=parsed.errors.length>0||!workflowReady;
     renderAdminImportPreview();
   }catch(e){if(version!==importReadVersion)return;$w('importStatusBadge').textContent='อ่านไม่สำเร็จ';appAlert(e.message);}
+}
+function importScopeKey(row){return JSON.stringify([row.branch,row.date]);}
+function mergeAdminImport(previous,incoming){
+  const scopes=new Set(incoming.rows.map(importScopeKey));
+  const retained=(previous?.rows||[]).filter(row=>!scopes.has(importScopeKey(row)));
+  const rows=[...retained,...incoming.rows];
+  const coverage=new Set((previous?.coverage||[]).filter(key=>{const [branch,date]=JSON.parse(key);return previous.branches.includes(branch)&&date>=previous.start&&date<=previous.end&&!previous.excludedDates?.includes(date);}));
+  if(previous&&!previous.coverage)for(const branch of previous.branches||[]){
+    for(const date of dateRange(previous.start,previous.end))if(!previous.excludedDates?.includes(date))coverage.add(importScopeKey({branch,date}));
+  }
+  scopes.forEach(scope=>coverage.add(scope));
+  const files=[...new Set([...(previous?.files|| (previous?.file?[previous.file]:[])),incoming.file])];
+  return {...incoming,rows,coverage:[...coverage],files,file:files.join(' / '),
+    start:previous&&previous.start<incoming.start?previous.start:incoming.start,
+    end:previous&&previous.end>incoming.end?previous.end:incoming.end,
+    branches:[...new Set([...(previous?.branches||[]),...incoming.branches])],
+    sourceRows:rows.reduce((sum,row)=>sum+(row.sourceCount||1),0)};
 }
 let adminImportSaving=false;
 async function commitImportData(){
@@ -182,19 +203,19 @@ async function commitImportData(){
   $w('excelFileInput').disabled=true;
   let before;
   try{
-    const replaced=parts.filter(p=>workflow.batches[p.type+':'+p.month]);
-    if(replaced.length&&!await appConfirm('แทนที่ข้อมูลเดือนเดิมของ '+replaced.map(p=>labels[p.type]+' '+p.month).join(', ')+' ด้วยไฟล์นี้หรือไม่? ชีตว่างและยอดตรวจนับเดิมจะคงอยู่'))return;
+    const replaced=parts.map(p=>{const scopes=new Set(p.rows.map(importScopeKey));const old=workflow.batches[p.type+':'+p.month];return {part:p,scopes:[...new Set((old?.rows||[]).filter(r=>scopes.has(importScopeKey(r))).map(importScopeKey))]};}).filter(p=>p.scopes.length);
+    if(replaced.length&&!await appConfirm('พบข้อมูลซ้ำวันและสาขาเดิม ต้องการแทนที่เฉพาะประเภท/สาขา/วันที่ต่อไปนี้หรือไม่?\n'+replaced.map(({part,scopes})=>labels[part.type]+': '+scopes.map(k=>{const [branch,date]=JSON.parse(k);return branch+' วันที่ '+date;}).join(', ')).join('\n')+'\nข้อมูลวันอื่น สาขาอื่น ชีตว่าง และยอดตรวจนับเดิมจะคงอยู่'))return;
     if(preview!==importPreview||!workflowReady||bomCloud.member?.role!=='admin')return;
     before=structuredClone(workflow);
     for(const p of parts){
       const aggregate=new Map(),newCodes=p.type==='SALES'?newImportMenuCodes(p.rows,appState.recipes,workflow.batches):new Set();
       for(const r of p.rows){
-        if(!workflow.removedBranches?.[r.branch])workflow.branches[r.branch]=r.branchName;
+        if(!Object.hasOwn(workflow.branches,r.branch)||workflow.removedBranches?.[r.branch])throw Error('รหัสสาขา '+r.branch+' ไม่มีในระบบ กรุณาเลือกไฟล์ใหม่');
         const id=JSON.stringify([r.branch,r.date,r.code]);
-        if(!aggregate.has(id))aggregate.set(id,{branch:r.branch,date:r.date,code:r.code,name:r.name,qty:0,unit:r.unit,...(newCodes.has(r.code)?{newMenu:true}:{})});
-        aggregate.get(id).qty+=r.qty;
+        if(!aggregate.has(id))aggregate.set(id,{branch:r.branch,date:r.date,code:r.code,name:r.name,qty:0,sourceCount:0,unit:r.unit,...(newCodes.has(r.code)?{newMenu:true}:{})});
+        aggregate.get(id).qty+=r.qty;aggregate.get(id).sourceCount++;
       }
-      workflow.batches[p.type+':'+p.month]={type:p.type,month:p.month,file:p.file,quantityField:p.quantityField,start:p.start,end:p.end,branches:[...new Set(p.rows.map(r=>r.branch))],rows:[...aggregate.values()],sourceRows:p.rows.length,importedAt:new Date().toISOString()};
+      workflow.batches[p.type+':'+p.month]=mergeAdminImport(workflow.batches[p.type+':'+p.month],{type:p.type,month:p.month,file:p.file,quantityField:p.quantityField,start:p.start,end:p.end,branches:[...new Set(p.rows.map(r=>r.branch))],rows:[...aggregate.values()],sourceRows:p.rows.length,importedAt:new Date().toISOString()});
     }
     await storeWorkflow();importPreview=null;
     $w('adminPreviewControls').classList.add('hidden');
@@ -566,9 +587,14 @@ function buildReport(branch,start,end,source=workflow,allowCentralCoverage=true)
         const coverage=bomCloud.coverage.find(c=>c.kind===type && c.period===date.slice(0,7) && c.start_date<=date && c.end_date>=date);
         if(coverage)b={start:coverage.start_date,end:coverage.end_date,quantityField:coverage.quantity_field,branches:[],rows:[]};
       }
-      // Central movement files cover all branches. No matching transaction for
-      // this branch is zero movement, not an absent upload. Sales remain scoped.
-      if (!b || date<b.start || date>b.end || b.excludedDates?.includes(date) || (type==='SALES' && !b.branches.includes(branch))) issues.add(`ขาดข้อมูล${labels[type]}ของสาขาในช่วงที่เลือก`);
+      // Movement is optional each day; only existing transactions participate.
+      if(type!=='SALES'){
+        if(!b || b.excludedDates?.includes(date) || !rowsFor(b,branch,date).length)continue;
+        if(b.quantityField!==sourceQuantityField(type))issues.add(`กรุณานำเข้า${labels[type]}ใหม่ โดยใช้คอลัมน์ ${sourceQuantityField(type)}`);
+        else batches[type]=b;
+        continue;
+      }
+      if (!b || date<b.start || date>b.end || b.excludedDates?.includes(date) || (b.coverage && !b.coverage.includes(importScopeKey({branch,date}))) || !b.branches.includes(branch)) issues.add(`ขาดข้อมูล${labels[type]}ของสาขาในช่วงที่เลือก`);
       else if (b.quantityField !== sourceQuantityField(type)) issues.add(`กรุณานำเข้า${labels[type]}ใหม่ โดยใช้คอลัมน์ ${sourceQuantityField(type)}`);
       else batches[type]=b;
     }
@@ -606,6 +632,7 @@ function buildReport(branch,start,end,source=workflow,allowCentralCoverage=true)
 let latestReport=[];
 let visibleVarianceRows=[];
 function renderVarianceDashboard() {
+  appState.varianceFilter.viewType='summary';
   const branch=$w('varianceBranchInput').value||'ALL';
   const mode=appState.varianceFilter.periodMode;
   let start,end;
@@ -621,19 +648,14 @@ function renderVarianceDashboard() {
   $w('activeBranchLabel').textContent=branch==='ALL'?'ทุกสาขา (แยกผลต่าง ไม่หักกลบกัน)':workflow.branches[branch]||'เลือกสาขา';
   $w('activePeriodLabel').textContent=start&&end?`${start} ถึง ${end}`:'เลือกช่วงวันที่';
   const ready=latestReport.filter(r=>r.ready), incomplete=latestReport.length-ready.length;
-  $w('reportReadiness').textContent=!latestReport.length?'ยังไม่มีรายการ: นำเข้าข้อมูล เลือกวัตถุดิบสำคัญ และเลือกช่วงวันที่ไม่เกิน 366 วัน':`คำนวณได้ ${ready.length} รายการ · รอข้อมูล ${incomplete} รายการ · ไม่ใช้ศูนย์แทนข้อมูลที่ขาด`;
+  $w('reportReadiness').textContent=!latestReport.length?'ยังไม่มีรายการ: นำเข้าข้อมูล เลือกวัตถุดิบสำคัญ และเลือกช่วงวันที่ไม่เกิน 366 วัน':`คำนวณได้ ${ready.length} รายการ · รอข้อมูล ${incomplete} รายการ · วันไม่มีรายการรับเข้า/จ่ายออกคิดเป็น 0 · ยอดขายและยอดตรวจนับต้องครบ`;
   $w('kpiTheoryCost').textContent=String(ready.length);
   $w('kpiNetVarianceCost').textContent=String(ready.filter(r=>r.overuse < -0.000001).length);
   $w('kpiVarianceDirectionText').textContent='นับแยกตามสาขาและวัตถุดิบ ไม่รวมปริมาณต่างหน่วยเข้าด้วยกัน';
   $w('kpiVariancePct').textContent=String(incomplete);
   $w('kpiWarningItemsCount').textContent=String(ready.filter(r=>r.overuse>0.000001).length);
   $w('varianceTableBody').innerHTML=reportRowsHtml(latestReport,false);
-  if(appState.varianceFilter.viewType==='trend') {
-    const dates=dateRange(start,end);
-    const rows=dates.length<=366?dates.flatMap(d=>branches.flatMap(b=>buildReport(b,d,d))):[];
-    visibleVarianceRows=rows;
-    $w('varianceDailyBreakdownTableBody').innerHTML=reportRowsHtml(rows,true);
-  }
+
 }
 function stockDifference(r) {
   if(!r.ready)return {qty:null,pct:null,label:'รอข้อมูล',tone:'pending'};
@@ -670,7 +692,7 @@ function exportVarianceReport() {
   // Refresh from the current controls, then export exactly the displayed view.
   renderVarianceDashboard();
   if(!visibleVarianceRows.length){appAlert('ยังไม่มีข้อมูลรายงาน');return;}
-  const daily=appState.varianceFilter.viewType==='trend';
+  const daily=false;
   const rows=visibleVarianceRows.map(r=>{
     const d=stockDifference(r),pct=d.pct==null?'':(d.pct>0?'+':'')+d.pct.toLocaleString('th-TH',{maximumFractionDigits:1})+'%';
     return {...(daily?{'วันที่':r.end}:{'ตั้งแต่วันที่':r.start,'ถึงวันที่':r.end}),

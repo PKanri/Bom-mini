@@ -380,7 +380,7 @@
             📥 ส่วนกลางอัปโหลดข้อมูลรวมทุกสาขา
           </h2>
           <p class="text-xs text-[var(--muted-foreground,#64748b)] mt-1">
-            ใช้ไฟล์เดียวที่มีชีต ยอดขาย, stock in, stock out และเครื่องดื่ม in ระบบแยกตามสาขาและวันที่เดิม ตรวจครบก่อนบันทึกพร้อมกัน ชีตว่างจะไม่แทนที่ข้อมูลเดิม
+            ใช้ไฟล์เดียวที่มีชีต ยอดขาย, stock in, stock out และเครื่องดื่ม in รับเฉพาะรหัสสาขาที่มีในระบบ ข้อมูลวันใหม่เพิ่มต่อจากเดิม หากวันและสาขาซ้ำจะยืนยันแทนที่เฉพาะส่วนนั้น ชีตว่างคงข้อมูลเดิม ประวัติรวมตามประเภทและเดือน
           </p>
         </div>
 
@@ -591,15 +591,7 @@
             </button>
           </div>
 
-          <!-- Right: Sub-View Switcher (Summary Table vs Daily Breakdown) -->
-          <div class="flex items-center gap-1 bg-slate-100 p-1 rounded-xl border border-slate-200 text-xs">
-            <button onclick="setVarianceViewType('summary')" id="btn-view-summary" class="px-3 py-1.5 rounded-lg font-bold bg-white text-slate-800 shadow-xs transition-all">
-              📊 ตารางสรุปรวม (Summary)
-            </button>
-            <button onclick="setVarianceViewType('trend')" id="btn-view-trend" class="px-3 py-1.5 rounded-lg font-bold text-slate-600 hover:text-slate-900 transition-all">
-              📈 แจกแจงเปรียบเทียบรายวัน (Daily Trend)
-            </button>
-          </div>
+
         </div>
 
         <!-- Dynamic Filter Inputs -->
@@ -717,23 +709,6 @@
         </div>
       </div>
 
-      <!-- VIEW 2: DAILY BREAKDOWN & TREND TABLE (เมื่อเลือกดูเปรียบเทียบรายวัน) -->
-      <div id="varianceTrendTableView" class="hidden space-y-4">
-        <div class="bg-[var(--card,#ffffff)] rounded-2xl border border-[var(--border,#e2e8f0)] shadow-xs overflow-hidden">
-          <div class="p-3.5 bg-slate-50/70 border-b border-slate-200 flex items-center justify-between">
-            <div class="text-xs font-bold text-slate-700">ตารางแจกแจงเปรียบเทียบผลต่างรายวัน (Day-by-Day Variance Matrix)</div>
-            <span class="text-xs text-slate-500">ช่วยระบุวันที่เกิดความผิดปกติหรือของสูญหายได้ทันที</span>
-          </div>
-          <div class="overflow-x-auto">
-            <table class="w-full text-left text-xs">
-              <thead class="bg-slate-100"><tr><th class="p-3 whitespace-nowrap">วันที่</th><th class="p-3 whitespace-nowrap ">วัตถุดิบ (Raw Material)</th><th class="p-3 whitespace-nowrap ">ยกมา (Opening)</th><th class="p-3 whitespace-nowrap stock-in">รับเข้า (+)</th><th class="p-3 whitespace-nowrap stock-out">จ่ายออก (−)</th><th class="p-3 whitespace-nowrap stock-out">สูญเสีย (−)</th><th class="p-3 whitespace-nowrap stock-bom">ตัดตามสูตร (−)</th><th class="p-3 whitespace-nowrap stock-theory">สต็อกควรมี</th><th class="p-3 whitespace-nowrap stock-actual">ยอดนับจริง</th><th class="p-3 whitespace-nowrap ">ผลต่าง (Qty)</th><th class="p-3 whitespace-nowrap">การใช้ขาด/เกิน (%)<div class="text-xs font-normal text-slate-500">← ใช้น้อย (−) · ใช้เกิน (+) →<br>(ควรเหลือ − นับจริง) ÷ BOM × 100<br>แถบเต็มที่ ±100%</div></th><th class="p-3 whitespace-nowrap ">สถานะ</th></tr></thead>
-              <tbody id="varianceDailyBreakdownTableBody" class="divide-y divide-slate-100">
-                <!-- Rendered by JS -->
-              </tbody>
-            </table>
-          </div>
-        </div>
-      </div>
     </section>
 
     <section id="tab-branch-check" class="tab-content hidden space-y-5">
@@ -1736,26 +1711,9 @@
       renderVarianceDashboard();
     }
 
-    function setVarianceViewType(viewType) {
-      appState.varianceFilter.viewType = viewType;
-
-      const btnSummary = document.getElementById('btn-view-summary');
-      const btnTrend = document.getElementById('btn-view-trend');
-      const summaryView = document.getElementById('varianceSummaryTableView');
-      const trendView = document.getElementById('varianceTrendTableView');
-
-      if (viewType === 'summary') {
-        btnSummary.className = 'px-3 py-1.5 rounded-lg font-bold bg-white text-slate-800 shadow-xs transition-all';
-        btnTrend.className = 'px-3 py-1.5 rounded-lg font-bold text-slate-600 hover:text-slate-900 transition-all';
-        summaryView.classList.remove('hidden');
-        trendView.classList.add('hidden');
-      } else {
-        btnTrend.className = 'px-3 py-1.5 rounded-lg font-bold bg-white text-slate-800 shadow-xs transition-all';
-        btnSummary.className = 'px-3 py-1.5 rounded-lg font-bold text-slate-600 hover:text-slate-900 transition-all';
-        summaryView.classList.add('hidden');
-        trendView.classList.remove('hidden');
-      }
-
+    function setVarianceViewType() {
+      appState.varianceFilter.viewType = 'summary';
+      document.getElementById('varianceSummaryTableView').classList.remove('hidden');
       renderVarianceDashboard();
     }
 
@@ -2121,6 +2079,7 @@
       // RENDER TABLE 2: DAILY BREAKDOWN / TREND TABLE
       // -------------------------------------------------------------
       const tbodyBreakdown = document.getElementById('varianceDailyBreakdownTableBody');
+      if (!tbodyBreakdown) return;
       tbodyBreakdown.innerHTML = '';
 
       if (dailyBreakdownRows.length === 0) {
@@ -2419,7 +2378,7 @@
   <script src="vendor/xlsx.full.min.js"></script>
   <script src="ponn-template.js"></script>
   <script src="supabase-config.js"></script>
-  <script src="workflow.js?v=20261103-unit-detail"></script>
+  <script src="workflow.js?v=20261103-summary-only"></script>
   <script src="count-units.js?v=20261103-loss-subunit"></script>
   <script src="supabase-store.js?v=20261026-branches"></script>
   <script src="data-cleanup.js?v=20261023-dialog"></script>
