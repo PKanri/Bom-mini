@@ -371,6 +371,11 @@ function changeRecipeUnit(selectId,qtyId){
   select.dataset.factor=String(next.factor);
   if(selectId!=='editRecipeUnit')updateAddEstimate();
 }
+function recipeUnitDetail(mat){
+  const units=recipeUnits(mat),main=units[0];
+  if(!main||units.length<2)return '';
+  return units.slice(1).map(unit=>`1 ${main.label} = ${(main.factor/unit.factor).toLocaleString('th-TH',{maximumFractionDigits:8})} ${unit.label}`).join(' · ');
+}
 function recipeQuantityText(item,mat,gross=false){
   if(item.unitReview)return esc(String(item.netQty)+' '+item.unitReview+' (ต้องตรวจหน่วยใหม่)');
   const units=recipeUnits(mat);

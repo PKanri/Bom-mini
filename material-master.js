@@ -43,7 +43,7 @@ async function saveMaterialMaster(){
     await storeWorkflow();
   }catch(e){Object.assign(mat,previous);workflow.settings=settings;status.textContent='บันทึกไม่สำเร็จ: '+e.message;return;}
   finally{masterSaving=false;$w('masterFields').disabled=false;}
-  $w('materialMasterDialog').close();renderCriticalSettings();renderBomModule();renderStockCountTable();renderVarianceDashboard();
+  $w('materialMasterDialog').close();renderCriticalSettings();renderBomModule();filterIngredientOptions();renderStockCountTable();renderVarianceDashboard();
   if(typeof renderBranchCheck==='function')renderBranchCheck();
   if(typeof renderStockOverview==='function')renderStockOverview();
 }
