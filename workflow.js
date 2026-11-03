@@ -668,10 +668,21 @@ function varianceBarHtml(d) {
   const label=(value>0?'+':'')+value.toLocaleString('th-TH',{minimumFractionDigits:2,maximumFractionDigits:2})+'%';
   return `<div class="variance-bar" role="img" aria-label="${esc(d.label+' '+label)}" title="${esc(d.label+' '+label)}${Math.abs(value)>100?' · แถบเต็มที่ 100%':''}"><span class="variance-bar-fill ${value<0?'variance-bar-negative':'variance-bar-positive'}" style="left:${value<0?50-width:50}%;width:${width}%"></span><span class="variance-bar-axis"></span><span class="variance-bar-label">${label}</span></div>`;
 }
+// Convert a report copy for presentation; stored quantities and BOM stay in base units.
+function reportDisplayRow(row) {
+  const setting=workflow.settings[row.code];
+  const main=setting&&typeof countUnits==='function'?countUnits(setting,row.code)[0]:null;
+  if(!main || !Number.isFinite(main.factor) || main.factor<=0)return {...row};
+  const result={...row,unit:main.label};
+  for(const key of ['opening','actual','in','out','bom','waste','theory','actualUsed','overuse']) {
+    if(result[key]!=null)result[key]/=main.factor;
+  }
+  return result;
+}
 function reportRowsHtml(rows,withDate) {
   const signed=(value,sign)=>value==null?'—':value===0?'0':sign+fmt(value);
-  return rows.map(r=>{
-    const d=stockDifference(r);
+  return rows.map(sourceRow=>{
+    const r=reportDisplayRow(sourceRow),d=stockDifference(r);
     const pct=d.pct==null?'':(d.pct>0?'+':'')+d.pct.toLocaleString('th-TH',{maximumFractionDigits:1})+'%';
     return `<tr class="stock-result-row">${withDate?'<td class="p-3 whitespace-nowrap">'+r.end+'</td>':''}
       <td class="p-3"><strong>${esc(r.name)}</strong><br><small class="text-slate-400">${esc(r.code)}</small><br><small class="text-slate-500">${esc(workflow.branches[r.branch]||r.branch)} (${esc(r.branch)})</small></td>
@@ -693,8 +704,8 @@ function exportVarianceReport() {
   renderVarianceDashboard();
   if(!visibleVarianceRows.length){appAlert('ยังไม่มีข้อมูลรายงาน');return;}
   const daily=false;
-  const rows=visibleVarianceRows.map(r=>{
-    const d=stockDifference(r),pct=d.pct==null?'':(d.pct>0?'+':'')+d.pct.toLocaleString('th-TH',{maximumFractionDigits:1})+'%';
+  const rows=visibleVarianceRows.map(sourceRow=>{
+    const r=reportDisplayRow(sourceRow),d=stockDifference(r),pct=d.pct==null?'':(d.pct>0?'+':'')+d.pct.toLocaleString('th-TH',{maximumFractionDigits:1})+'%';
     return {...(daily?{'วันที่':r.end}:{'ตั้งแต่วันที่':r.start,'ถึงวันที่':r.end}),
       'สาขา':workflow.branches[r.branch]||r.branch,'รหัสสาขา':r.branch,'วัตถุดิบ':r.name,'รหัสวัตถุดิบ':r.code,'หน่วย':r.unit,
       'ยกมา (Opening)':r.opening??'','รับเข้า (+)':r.in,'จ่ายออก (−)':r.out===0?0:-r.out,'สูญเสีย (−)':r.waste===0?0:-r.waste,
