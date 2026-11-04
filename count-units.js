@@ -111,6 +111,17 @@ function openSavedCountDate(date) {
   $w('stockCountDateInput').value=date;
   renderStockCountTable();
 }
+function countLossDisplay(c,units,setting){
+  const unit=units[units.length-1];
+  let base;
+  if(c.unitInputs && c.loss!=null){
+    if(c.loss==='')return {unit,value:''};
+    const previous=units.find(u=>u.label===c.lossUnit)||units[0];
+    base=Number(c.loss)*previous.factor;
+  }else if(c.waste!=null)base=Number(c.waste);
+  else if(c.loss!=null && c.loss!=='')base=Number(c.loss)/(setting.countDivisor||1);
+  return {unit,value:base==null?'':Number((base/unit.factor).toPrecision(15))};
+}
 function renderStockCountTable() {
   const branch=$w('stockCountBranchInput').value,date=$w('stockCountDateInput').value;
   const savedDates=Object.keys(workflow.counts).filter(key=>key.startsWith(branch+':')&&Object.values(workflow.counts[key]).some(c=>c.qty!=null)).map(key=>key.slice(branch.length+1)).sort().reverse();
@@ -122,14 +133,12 @@ function renderStockCountTable() {
   const counts=countDrafts[activeCountScope]||workflow.counts[activeCountScope]||{};
   $w('stockCountTableBody').innerHTML=entries.map(([code,s],i)=>{
     const count=counts[code], c=count?.unitReview?{}:count||{}, units=countUnits(s,code), values=displayCountInputs(c,units,s);
-    const savedLossUnit=c.lossUnit && units.some(u=>u.label===c.lossUnit)?c.lossUnit:units[0].label;
-    const lossFactor=units.find(u=>u.label===savedLossUnit).factor;
-    const loss=c.unitInputs?c.loss??'':c.waste!=null?c.waste/lossFactor:c.loss!=null?Number(c.loss)/(s.countDivisor||1)/lossFactor:'';
+    const lossDisplay=countLossDisplay(c,units,s),loss=lossDisplay.value;
     const total=values.some(v=>v!=='')?values.reduce((sum,v,j)=>sum+Number(v)*units[j].factor,0):null;
     return `<tr data-count-code="${esc(code)}"><td class="p-3"><strong style="display:block;font-size:16px;font-weight:700;line-height:1.5">${esc(s.name)}</strong><small>${esc(code)}</small>${count?.unitReview?'<p class="text-amber-700">ยอดเดิมต่างหน่วย กรุณาตรวจนับใหม่</p>':''}</td>
       ${[0,1].map(j=>{const u=units[j];return u?`<td class="p-3"><label class="text-xs font-semibold">${esc(u.label)}<input id="count-unit-${i}-${j}" type="number" inputmode="decimal" min="0" step="any" value="${esc(values[j])}" oninput="updateCountTotal(${i})" onkeydown="handleCountUnitTab(event)" placeholder="จำนวน${esc(u.label)}" aria-label="คงเหลือ ${esc(s.name)} หน่วย ${esc(u.label)}" class="block border rounded-lg p-2 w-28 mt-1" ${!branch?'disabled':''}></label></td>`:'<td class="p-3 text-slate-400"><input disabled placeholder="– ไม่มีเศษ" class="border rounded-lg p-2 w-28 bg-slate-100"></td>';}).join('')}
       <td id="count-total-${i}" class="p-3 text-emerald-700 font-semibold">${total==null?'ยังไม่ได้นับ':fmt(total/units[0].factor)+' '+esc(units[0].label)}</td>
-      <td class="p-3"><input id="count-loss-${i}" type="number" inputmode="decimal" min="0" step="any" value="${esc(loss)}" oninput="rememberCountDraft()" placeholder="จำนวนสูญเสีย" class="border rounded-lg p-2 w-24" ${!branch?'disabled':''}><select id="count-loss-unit-${i}" onchange="rememberCountDraft()" class="border rounded-lg p-2" ${!branch?'disabled':''}>${units.map(u=>`<option value="${esc(u.label)}" ${u.label===savedLossUnit?'selected':''}>${esc(u.label)}</option>`).join('')}</select></td>
+      <td class="p-3"><input id="count-loss-${i}" type="number" inputmode="decimal" min="0" step="any" value="${esc(loss)}" oninput="rememberCountDraft()" placeholder="จำนวนสูญเสีย" class="border rounded-lg p-2 w-24" ${!branch?'disabled':''}><input id="count-loss-unit-${i}" type="hidden" value="${esc(lossDisplay.unit.label)}"><span class="inline-block p-2 text-xs font-semibold">${esc(lossDisplay.unit.label)}</span></td>
       <td class="p-3"><input id="count-note-${i}" value="${esc(c.remarks||'')}" oninput="rememberCountDraft()" placeholder="หมายเหตุ" class="border rounded-lg p-2" ${!branch?'disabled':''}></td></tr>`;
   }).join('')||'<tr><td colspan="6" class="p-6">กำหนดวัตถุดิบสำคัญในเมนู 1 ก่อน</td></tr>';
   const savedItems=Object.values(workflow.counts[activeCountScope]||{}).filter(c=>c.qty!=null).length;

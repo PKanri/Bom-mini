@@ -573,7 +573,11 @@ async function savePhysicalStockCount() {
   } catch(error) {workflow.counts[key]=previous;storageError(error);}
 }
 
-function buildReport(branch,start,end,source=workflow,allowCentralCoverage=true) {
+function latestReportCount(source,branch,code,before) {
+  return Object.entries(source.counts).filter(([key,items])=>key.startsWith(branch+':') && key.slice((branch+':').length)<before && Number.isFinite(items?.[code]?.qty) && !items[code].unitReview)
+    .map(([key,items])=>({date:key.slice((branch+':').length),count:items[code]})).sort((a,b)=>b.date.localeCompare(a.date))[0];
+}
+function buildReport(branch,start,end,source=workflow,allowCentralCoverage=true,availableOnly=false) {
   const dates=dateRange(start,end), entries=typeof orderedCountEntries==='function'?orderedCountEntries():criticalEntries();
   if (!dates.length || dates.length>366) return [];
   const issues=new Set(), totals=new Map(entries.map(([code])=>[code,{in:0,out:0,bom:0}]));
@@ -594,6 +598,7 @@ function buildReport(branch,start,end,source=workflow,allowCentralCoverage=true)
         else batches[type]=b;
         continue;
       }
+      if (availableOnly && (!b || date<b.start || date>b.end || b.excludedDates?.includes(date) || !rowsFor(b,branch,date).length))continue;
       if (!b || date<b.start || date>b.end || b.excludedDates?.includes(date) || (b.coverage && !b.coverage.includes(importScopeKey({branch,date}))) || !b.branches.includes(branch)) issues.add(`ขาดข้อมูล${labels[type]}ของสาขาในช่วงที่เลือก`);
       else if (b.quantityField !== sourceQuantityField(type)) issues.add(`กรุณานำเข้า${labels[type]}ใหม่ โดยใช้คอลัมน์ ${sourceQuantityField(type)}`);
       else batches[type]=b;
@@ -616,17 +621,21 @@ function buildReport(branch,start,end,source=workflow,allowCentralCoverage=true)
     });
   }
   return entries.map(([code,s])=>{
-    const rowIssues=new Set(issues), first=source.counts[countKey(branch,priorDay(start))]?.[code], last=source.counts[countKey(branch,end)]?.[code];
+    const fallback=availableOnly?latestReportCount(source,branch,code,start):null;
+    const openingDate=fallback?.date||priorDay(start);
+    const activeDates=availableOnly?dates.filter(date=>Number.isFinite(source.counts[countKey(branch,date)]?.[code]?.qty) || Object.values(source.batches).some(b=>!b.excludedDates?.includes(date)&&rowsFor(b,branch,date).length)):dates;
+    const effectiveEnd=activeDates.at(-1)||end;
+    const rowIssues=new Set(issues), first=availableOnly?fallback?.count:source.counts[countKey(branch,priorDay(start))]?.[code], last=source.counts[countKey(branch,effectiveEnd)]?.[code];
     if(!Number.isFinite(s.inFactor)||s.inFactor<=0||!Number.isFinite(s.outFactor)||s.outFactor<=0)rowIssues.add('รหัสใหม่ตามรายการ: รอตรวจอัตราแปลงรับเข้า/จ่ายออก');
     if(typeof COUNT_UNIT_LIST!=='undefined' && ['RM-101-0256','RM-101-0290','RM-102-0069'].includes(code) && !appState.recipes.some(r=>r.items.some(i=>appState.materials.find(m=>m.id===i.materialId)?.code===code)))rowIssues.add('รอผูกสูตรกับรหัสวัตถุดิบนี้');
     const opening=first?.unitReview?undefined:first?.qty,actual=last?.unitReview?undefined:last?.qty;
     let waste=0;
-    dates.forEach(date=>{const count=source.counts[countKey(branch,date)]?.[code];if(!count||count.qty==null||count.unitReview)rowIssues.add('รอข้อมูลตรวจนับ/สูญเสียรายวันให้ครบ');else waste+=count.waste||0;});
+    dates.forEach(date=>{const count=source.counts[countKey(branch,date)]?.[code];if(!count||count.qty==null||count.unitReview){if(!availableOnly)rowIssues.add('รอข้อมูลตรวจนับ/สูญเสียรายวันให้ครบ');}else waste+=count.waste||0;});
     if (opening==null) rowIssues.add(`รอยอดนับยกมา ${priorDay(start)}`);
-    if (actual==null) rowIssues.add(`รอยอดนับปลายวัน ${end}`);
+    if (actual==null && !availableOnly) rowIssues.add(`รอยอดนับปลายวัน ${end}`);
     const t=totals.get(code), ready=rowIssues.size===0, theory=ready?opening+t.in-t.out-waste-t.bom:null;
-    const actualUsed=ready?opening+t.in-t.out-waste-actual:null, overuse=ready?actualUsed-t.bom:null;
-    return {branch,code,name:s.name,unit:s.unit,start,end,opening,actual,...t,waste,ready,theory,actualUsed,overuse,issues:[...rowIssues]};
+    const actualUsed=ready&&actual!=null?opening+t.in-t.out-waste-actual:null, overuse=actualUsed!=null?actualUsed-t.bom:null;
+    return {branch,code,name:s.name,unit:s.unit,start,end,openingDate,effectiveEnd,availableOnly,opening,actual,...t,waste,ready,theory,actualUsed,overuse,issues:[...rowIssues]};
   });
 }
 let latestReport=[];
@@ -643,12 +652,12 @@ function renderVarianceDashboard() {
     end=month?new Date(Date.UTC(Number(month.slice(0,4)),Number(month.slice(5)),0)).toISOString().slice(0,10):'';
   } else {start=$w('varianceStartDateInput').value;end=$w('varianceEndDateInput').value;}
   const branches=branch==='ALL'?Object.keys(workflow.branches):[branch];
-  latestReport=branches.flatMap(b=>buildReport(b,start,end));
+  latestReport=branches.flatMap(b=>buildReport(b,start,end,workflow,true,true));
   visibleVarianceRows=latestReport;
   $w('activeBranchLabel').textContent=branch==='ALL'?'ทุกสาขา (แยกผลต่าง ไม่หักกลบกัน)':workflow.branches[branch]||'เลือกสาขา';
   $w('activePeriodLabel').textContent=start&&end?`${start} ถึง ${end}`:'เลือกช่วงวันที่';
   const ready=latestReport.filter(r=>r.ready), incomplete=latestReport.length-ready.length;
-  $w('reportReadiness').textContent=!latestReport.length?'ยังไม่มีรายการ: นำเข้าข้อมูล เลือกวัตถุดิบสำคัญ และเลือกช่วงวันที่ไม่เกิน 366 วัน':`คำนวณได้ ${ready.length} รายการ · รอข้อมูล ${incomplete} รายการ · วันไม่มีรายการรับเข้า/จ่ายออกคิดเป็น 0 · ยอดขายและยอดตรวจนับต้องครบ`;
+  $w('reportReadiness').textContent=!latestReport.length?'ยังไม่มีรายการ: นำเข้าข้อมูล เลือกวัตถุดิบสำคัญ และเลือกช่วงวันที่ไม่เกิน 366 วัน':`คำนวณได้ ${ready.length} รายการ · รอข้อมูล ${incomplete} รายการ · ใช้ยอดยกมาล่าสุดก่อนช่วงที่เลือก · รวมเฉพาะข้อมูลที่มี · ผลต่างเทียบยอดนับวันที่สิ้นสุดข้อมูล`;
   $w('kpiTheoryCost').textContent=String(ready.length);
   $w('kpiNetVarianceCost').textContent=String(ready.filter(r=>r.overuse < -0.000001).length);
   $w('kpiVarianceDirectionText').textContent='นับแยกตามสาขาและวัตถุดิบ ไม่รวมปริมาณต่างหน่วยเข้าด้วยกัน';
@@ -659,6 +668,7 @@ function renderVarianceDashboard() {
 }
 function stockDifference(r) {
   if(!r.ready)return {qty:null,pct:null,label:'รอข้อมูล',tone:'pending'};
+  if(r.overuse==null)return {qty:null,pct:null,label:'คำนวณยอดคงเหลือแล้ว',tone:'pending'};
   const qty=Math.abs(r.overuse)<0.000001?0:-r.overuse;
   return {qty,pct:r.bom>0?qty/r.bom*100:qty===0?0:null,label:qty<0?'ใช้เกินสูตร':qty>0?'ใช้น้อยกว่าสูตร':'ตรงตามสูตร',tone:qty<0?'short':qty>0?'surplus':'equal'};
 }
@@ -686,15 +696,15 @@ function reportRowsHtml(rows,withDate) {
     const pct=d.pct==null?'':(d.pct>0?'+':'')+d.pct.toLocaleString('th-TH',{maximumFractionDigits:1})+'%';
     return `<tr class="stock-result-row">${withDate?'<td class="p-3 whitespace-nowrap">'+r.end+'</td>':''}
       <td class="p-3"><strong>${esc(r.name)}</strong><br><small class="text-slate-400">${esc(r.code)}</small><br><small class="text-slate-500">${esc(workflow.branches[r.branch]||r.branch)} (${esc(r.branch)})</small></td>
-      <td class="p-3 text-right whitespace-nowrap">${fmt(r.opening)} ${esc(r.unit)}</td>
+      <td class="p-3 text-right whitespace-nowrap">${fmt(r.opening)} ${esc(r.unit)}${r.availableOnly?'<br><small class="text-slate-500">ยอดบันทึก '+esc(r.openingDate)+'</small>':''}</td>
       <td class="p-3 text-right stock-in">${signed(r.in,'+')}</td>
       <td class="p-3 text-right stock-out">${signed(r.out,'−')}</td>
       <td class="p-3 text-right stock-out">${signed(r.waste,'−')}</td>
       <td class="p-3 text-right stock-bom">${signed(r.bom,'−')}</td>
       <td class="p-3 text-right stock-theory">${fmt(r.theory)}</td>
-      <td class="p-3 text-right stock-actual">${fmt(r.actual)}</td>
+      <td class="p-3 text-right stock-actual">${fmt(r.actual)}${r.availableOnly&&r.actual!=null?'<br><small class="text-slate-500">'+esc(r.effectiveEnd)+'</small>':''}</td>
       <td class="p-3 text-right whitespace-nowrap stock-diff-${d.tone}">${d.qty==null?'—':(d.qty>0?'+':'')+fmt(d.qty)+' '+esc(r.unit)}</td>
-      <td class="p-3">${varianceBarHtml(d)}</td><td class="p-3"><span class="stock-badge stock-badge-${d.tone}">${d.label}${pct?' ('+pct+')':''}</span>${!r.ready?'<div class="stock-issues">'+esc(r.issues.join(' / '))+'</div>':d.pct==null?'<div class="stock-issues">BOM เป็น 0 จึงคำนวณ % ไม่ได้</div>':''}</td></tr>`;
+      <td class="p-3">${varianceBarHtml(d)}</td><td class="p-3"><span class="stock-badge stock-badge-${d.tone}">${d.label}${pct?' ('+pct+')':''}</span>${!r.ready?'<div class="stock-issues">'+esc(r.issues.join(' / '))+'</div>':r.actual==null?'<div class="stock-issues">ยังไม่มียอดนับจริงสำหรับเทียบผลต่าง</div>':d.pct==null?'<div class="stock-issues">BOM เป็น 0 จึงคำนวณ % ไม่ได้</div>':''}</td></tr>`;
   }).join('')||`<tr><td colspan="${withDate?12:11}" class="p-6">ยังไม่มีข้อมูลสำหรับรายงาน</td></tr>`;
 }
 const originalSetVarianceViewType=setVarianceViewType;
@@ -707,11 +717,11 @@ function exportVarianceReport() {
   const rows=visibleVarianceRows.map(sourceRow=>{
     const r=reportDisplayRow(sourceRow),d=stockDifference(r),pct=d.pct==null?'':(d.pct>0?'+':'')+d.pct.toLocaleString('th-TH',{maximumFractionDigits:1})+'%';
     return {...(daily?{'วันที่':r.end}:{'ตั้งแต่วันที่':r.start,'ถึงวันที่':r.end}),
-      'สาขา':workflow.branches[r.branch]||r.branch,'รหัสสาขา':r.branch,'วัตถุดิบ':r.name,'รหัสวัตถุดิบ':r.code,'หน่วย':r.unit,
+      'สาขา':workflow.branches[r.branch]||r.branch,'รหัสสาขา':r.branch,'วัตถุดิบ':r.name,'รหัสวัตถุดิบ':r.code,'หน่วย':r.unit,'วันที่ยอดยกมา':r.openingDate,'ข้อมูลถึงวันที่':r.effectiveEnd,
       'ยกมา (Opening)':r.opening??'','รับเข้า (+)':r.in,'จ่ายออก (−)':r.out===0?0:-r.out,'สูญเสีย (−)':r.waste===0?0:-r.waste,
       'ตัดตามสูตร (−)':r.bom===0?0:-r.bom,'สต็อกควรมี':r.theory??'','ยอดนับจริง':r.actual??'',
       'ผลต่าง (Qty)':d.qty??'','% ผลต่างเทียบ BOM':d.pct==null?'':d.pct/100,
-      'สถานะ':d.label+(pct?' ('+pct+')':''),'% การใช้เกินสูตร (กราฟ)':d.pct==null?'':d.pct===0?0:-d.pct/100,'รายละเอียด':!r.ready?r.issues.join(' / '):d.pct==null?'BOM เป็น 0 จึงคำนวณ % ไม่ได้':''};
+      'สถานะ':d.label+(pct?' ('+pct+')':''),'% การใช้เกินสูตร (กราฟ)':d.pct==null?'':d.pct===0?0:-d.pct/100,'รายละเอียด':!r.ready?r.issues.join(' / '):r.actual==null?'ยังไม่มียอดนับจริงสำหรับเทียบผลต่าง':d.pct==null?'BOM เป็น 0 จึงคำนวณ % ไม่ได้':''};
   });
   const sheet=XLSX.utils.json_to_sheet(rows),headers=Object.keys(rows[0]);
   const numeric=['ยกมา (Opening)','รับเข้า (+)','จ่ายออก (−)','สูญเสีย (−)','ตัดตามสูตร (−)','สต็อกควรมี','ยอดนับจริง','ผลต่าง (Qty)','% ผลต่างเทียบ BOM','% การใช้เกินสูตร (กราฟ)'];
