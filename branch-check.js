@@ -198,7 +198,13 @@ function branchCheckInput(index,field,part,value) {
 function branchCheckValues(scope,code,s,field) {
   const units=countUnits(s,code);
   const saved=workflow.counts[countKey(scope.branch,field==='opening'?priorDay(scope.date):scope.date)]?.[code];
-  if(field==='waste')return [saved?.unitReview?'':saved?.waste??''];
+  if(field==='waste'){
+    if(!saved||saved.unitReview)return [''];
+    if(saved.waste!=null && saved.waste!==''){
+      return [Number((Number(saved.waste)/units.at(-1).factor).toPrecision(15))];
+    }
+    return [countLossDisplay(saved,units,s).value];
+  }
   return displayCountInputs(saved,units,s);
 }
 function branchCheckQuantity(values,units) {
@@ -217,7 +223,7 @@ function branchCheckModel(scope) {
   const opening={},closing={};
   for(const [code,s]of orderedCountEntries()){
     const units=countUnits(s,code),draft=branchCheckState.counts[code]||{};
-    const qty=field=>branchCheckQuantity(draft[field]??branchCheckValues(scope,code,s,field),field==='waste'?[{factor:1}]:units);
+    const qty=field=>branchCheckQuantity(draft[field]??branchCheckValues(scope,code,s,field),field==='waste'?units.slice(-1):units);
     const start=qty('opening'),end=qty('actual'),waste=qty('waste');
     if(start!=null)opening[code]={qty:start};
     if(end!=null)closing[code]={qty:end,waste:waste??0};
@@ -240,12 +246,17 @@ function calculateBranchCheck() {
         cell.innerHTML=`<button type="button" class="report-detail-number" onclick="showBranchReportDetails(${index},'${field}')" aria-label="ดูรายละเอียด${field==='bom'?'ใช้ตาม BOM':field==='in'?'รับเข้า':'จ่ายออก'}">${fmt(r[field])}</button>`;
       }
       $w(`bc-theory-${index}`).textContent=fmt(r.theory);
-      $w(`bc-diff-${index}`).textContent=fmt(d.qty);
+      const differenceCell=$w(`bc-diff-${index}`);
+      differenceCell.textContent=fmt(d.qty);
+      differenceCell.style.color={pending:'#64748b',equal:'#059669',surplus:'#2563eb',short:'#e11d48'}[d.tone];
     });
     const ready=rows.filter(r=>r.ready);
     $w('branchCheckSummary').textContent=`คำนวณได้ ${ready.length} / ${rows.length} รายการ · มีผลต่าง ${ready.filter(r=>Math.abs(r.overuse)>1e-6).length} รายการ · รอข้อมูล ${rows.length-ready.length} รายการ`;
   }catch(e){branchCheckState.rows=[];$w('branchCheckSummary').textContent=e.message;
-    for(const cell of document.querySelectorAll('#branchCheckBody [data-result]'))cell.textContent='—';
+    for(const cell of document.querySelectorAll('#branchCheckBody [data-result]')){
+      cell.textContent='—';
+      if(cell.id.startsWith('bc-diff-'))cell.style.color='#64748b';
+    }
   }
 }
 function renderBranchCheck() {
@@ -256,7 +267,7 @@ function renderBranchCheck() {
     $w('branchCheckBody').innerHTML=orderedCountEntries().map(([code,s],index)=>{
       const units=countUnits(s,code);
       const inputs=field=>{
-        const specs=field==='waste'?[{label:s.unit,factor:1}]:units;
+        const specs=field==='waste'?units.slice(-1):units;
         const values=branchCheckState.counts[code]?.[field]??branchCheckValues(scope,code,s,field);
         return specs.map((u,part)=>`<label class="bc-count">${esc(u.label)}<input ${field==='actual'||field==='opening'?`data-branch-count="${field}" onkeydown="handleBranchCountTab(event,'${field}')"`:''} aria-label="${esc(s.name+' '+field+' '+u.label)}" type="number" min="0" step="any" placeholder="${field==='waste'?'0':'ยังไม่นับ'}" value="${esc(values[part]??'')}" oninput="branchCheckInput(${index},'${field}',${part},this.value)"></label>`).join('');
       };
@@ -315,10 +326,11 @@ async function saveBranchCheckCounts() {
       const units=countUnits(s,code),draft=branchCheckState.counts[code]||{};
       const values=draft.actual??branchCheckValues(scope,code,s,'actual');
       const qty=branchCheckQuantity(values,units);
-      const waste=branchCheckQuantity(draft.waste??branchCheckValues(scope,code,s,'waste'),[{factor:1}])??0;
+      const lossValues=draft.waste??branchCheckValues(scope,code,s,'waste');
+      const waste=branchCheckQuantity(lossValues,units.slice(-1))??0;
       if(qty==null){if(waste)throw Error('กรอกยอดนับจริงของ '+s.name+' ก่อนบันทึกของสูญเสีย');continue;}
       entered++;
-      next[code]={...(previous?.[code]||{}),qty,unitInputs:units.map((u,i)=>({...u,value:values[i]??''})),waste,loss:String(waste/units[0].factor),lossUnit:units[0].label,updatedAt:new Date().toISOString()};
+      next[code]={...(previous?.[code]||{}),qty,unitInputs:units.map((u,i)=>({...u,value:values[i]??''})),waste,loss:String(lossValues[0]??''),lossUnit:units.at(-1).label,updatedAt:new Date().toISOString()};
       delete next[code].unitReview;
     }
     if(!entered)throw Error('กรอกยอดนับจริงอย่างน้อย 1 รายการก่อนบันทึก');

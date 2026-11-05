@@ -24,9 +24,9 @@
     #cloudLoginPanel #cloudSignInButton { width:100%;border-radius:10px;min-height:46px;font-weight:600; }
     @media(max-width:480px){body.auth-locked #cloudLoginPanel{padding:24px;}body.auth-locked > main{padding:24px 16px;}}
 
-    .stock-in { color:#059669; }
-    .stock-out { color:#e11d48; }
-    .stock-bom { color:#4f46e5; font-weight:600; }
+    .stock-in, .bc-results tr > :nth-child(3) { color:#059669; }
+    .stock-out, .bc-results tr > :nth-child(4) { color:#e11d48; }
+    .stock-bom, .bc-results tr > :nth-child(5) { color:#4f46e5; font-weight:600; }
     .stock-theory { background:#f4f7fb; font-weight:600; }
     .stock-actual { background:#ecfdf5; font-weight:700; }
     .stock-result-row:hover { background:#fafcff; }
@@ -2397,7 +2397,7 @@
   <script src="supabase-store.js?v=20261026-branches"></script>
   <script src="data-cleanup.js?v=20261023-dialog"></script>
   <script src="data-restore.js?v=20261023-dialog"></script>
-  <script src="branch-check.js?v=20261105-branch-details"></script>
+  <script src="branch-check.js?v=20261105-diff-positive-blue"></script>
   <script src="stock-overview.js?v=20261026-black-grid"></script>
   <script src="critical-layout.js?v=20261025"></script>
   <dialog id="materialMasterDialog" class="ponn-dialog" aria-label="แก้ไขข้อมูลวัตถุดิบหลัก" oncancel="if(masterSaving)event.preventDefault()">
