@@ -99,7 +99,7 @@ function parseBranchCheckFile(book,type,scope,allowUnscoped=false,allowEmpty=fal
     const raw=r[quantityField],qty=typeof raw==='number'?raw:Number(String(raw??'').replace(/,/g,''));
     if(raw==null||raw===''||!Number.isFinite(qty)||qty<0)throw Error(`แถว ${i+offset}: จำนวนไม่ถูกต้อง`);
     if(r.Status===true||String(r.Status).toLowerCase()==='true')throw Error(`แถว ${i+offset}: Status=true กรุณาตรวจเอกสาร`);
-    rows.push({branch:scope.branch,date:scope.date,code,qty,name:String(r['Product (Name)']||code)});
+    rows.push({branch:scope.branch,date:scope.date,code,qty,excelRow:i+offset,name:String(r['Product (Name)']||code)});
     detailRows.push({row:i+offset,qty,values:headers.map((_,j)=>{
       const cell=book.Sheets[name][XLSX.utils.encode_cell({r:i+offset-1,c:j+columnOffset})];
       return cell?XLSX.utils.format_cell(cell):'';
@@ -235,7 +235,12 @@ function calculateBranchCheck() {
     branchCheckState.rows=rows;
     rows.forEach((r,index)=>{
       const d=stockDifference(r);
-      for(const [field,value]of [['in',r.in],['out',r.out],['bom',r.bom],['theory',r.theory],['diff',d.qty]])$w(`bc-${field}-${index}`).textContent=fmt(value);
+      for(const field of ['in','out','bom']){
+        const cell=$w(`bc-${field}-${index}`);
+        cell.innerHTML=`<button type="button" class="report-detail-number" onclick="showBranchReportDetails(${index},'${field}')" aria-label="ดูรายละเอียด${field==='bom'?'ใช้ตาม BOM':field==='in'?'รับเข้า':'จ่ายออก'}">${fmt(r[field])}</button>`;
+      }
+      $w(`bc-theory-${index}`).textContent=fmt(r.theory);
+      $w(`bc-diff-${index}`).textContent=fmt(d.qty);
     });
     const ready=rows.filter(r=>r.ready);
     $w('branchCheckSummary').textContent=`คำนวณได้ ${ready.length} / ${rows.length} รายการ · มีผลต่าง ${ready.filter(r=>Math.abs(r.overuse)>1e-6).length} รายการ · รอข้อมูล ${rows.length-ready.length} รายการ`;

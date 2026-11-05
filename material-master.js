@@ -68,10 +68,14 @@ async function createMaterialMaster(){
   masterSaving=true;$w('masterFields').disabled=true;status.textContent='กำลังบันทึก…';
   try{
     materials.push(mat);
-    source.settings[code]={name,unit:main,subUnit:sub,countDivisor:sub?ratio:1,inFactor:1,outFactor:1,critical:false,countUnits:[{label:main,factor:1},...(sub?[{label:sub,factor:1/ratio}]:[])]};
+    source.settings[code]={name,unit:main,subUnit:sub,countDivisor:sub?ratio:1,inFactor:1,outFactor:1,critical:true,countUnits:[{label:main,factor:1},...(sub?[{label:sub,factor:1/ratio}]:[])]};
     await storeWorkflow();
   }catch(e){const index=materials.indexOf(mat);if(index>=0)materials.splice(index,1);delete source.settings[code];status.textContent='บันทึกไม่สำเร็จ: '+e.message;return;}
   finally{masterSaving=false;$w('masterFields').disabled=false;}
   $w('materialMasterDialog').close();renderCriticalSettings();renderBomModule();
+  if($w('criticalLayoutEditor').open && !criticalLayoutDraft.includes(code)){
+    criticalLayoutDraft.push(code);
+    renderCriticalLayout();
+  }
   $w('ingredientSelectInput').value=id;filterIngredientOptions();
 }

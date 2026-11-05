@@ -78,6 +78,20 @@
     }
   </style>
   <script src="app-dialog.js?v=20261023"></script>
+<style>
+.import-days .import-period{margin:-6px 0 16px;color:#475569}
+.import-modes{display:flex;gap:4px;padding:4px;border:0;border-radius:12px;background:#f1f5f9}
+.import-modes label{flex:1;padding:8px;text-align:center;border-radius:9px;cursor:pointer}
+.import-modes label:has(:checked){background:white;color:#065f46;font-weight:600;box-shadow:0 1px 3px #0002}
+.import-days input{accent-color:#047857}
+.import-date-list{max-height:34vh;overflow:auto;margin:12px 0;border:1px solid #e2e8f0;border-radius:10px}
+.import-date-list label{display:flex;align-items:center;gap:12px;padding:9px 12px;cursor:pointer}
+.import-date-list label+label{border-top:1px solid #e2e8f0}
+.import-date-list label:has(:checked){background:#ecfdf5}
+.import-date-list small{margin-left:auto;color:#475569}
+.import-selection{margin:12px 0;font-weight:600}
+.import-days button:disabled{opacity:.45;cursor:default}
+</style>
 </head>
 <body class="auth-locked bg-[var(--background,#f8fafc)] text-[var(--foreground,#0f172a)] antialiased font-sans min-h-screen">
 
@@ -186,8 +200,8 @@
         <fieldset id="criticalSettingsFields" disabled class="mt-3 space-y-3" oninput="updateCriticalExample()">
         <div class="flex flex-wrap gap-3 items-end text-xs">
           <label>หน่วยที่ใช้ในสูตรและรายงาน<select id="criticalUnit" class="block border rounded p-2 disabled:bg-slate-100"><option value="">เลือกวัตถุดิบก่อน</option></select><span id="criticalUnitHint" class="block mt-1 text-slate-500">ระบบใช้หน่วยเดียวกับวัตถุดิบในสูตร BOM</span></label>
-          <fieldset class="border rounded-lg p-3"><legend>หน่วยในไฟล์รับเข้า</legend><button type="button" onclick="setCriticalSameUnit('In')" class="text-emerald-700 underline mb-2">ใช้หน่วยเดียวกับรายงาน (1 = 1)</button><div class="flex gap-2 items-end">
-            <label>กี่หน่วยในไฟล์<input id="criticalInSourceQty" type="number" min="0" step="any" class="block border rounded p-2 w-24"></label><span class="pb-2">=</span>
+          <fieldset class="border rounded-lg p-3"><legend>หน่วยในไฟล์รับเข้า</legend><button type="button" id="criticalInSame" onclick="setCriticalSameUnit('In')" class="text-emerald-700 underline mb-2">ใช้หน่วยเดียวกับรายงาน (1 = 1)</button><div class="flex gap-2 items-end">
+            <label><span id="criticalInLabel">กี่หน่วยในไฟล์</span><input id="criticalInSourceQty" type="number" min="0" step="any" class="block border rounded p-2 w-24"></label><span class="pb-2">=</span>
             <label>ต่อ 1 หน่วยรายงาน<input id="criticalInFactor" type="number" value="1" readonly tabindex="-1" class="block border rounded p-2 w-24 bg-slate-100"></label>
           </div></fieldset>
           <fieldset class="border rounded-lg p-3"><legend>หน่วยในไฟล์จ่ายออก</legend><button type="button" onclick="setCriticalSameUnit('Out')" class="text-emerald-700 underline mb-2">ใช้หน่วยเดียวกับรายงาน (1 = 1)</button><div class="flex gap-2 items-end">
@@ -2361,7 +2375,7 @@
       <label class="block text-xs font-semibold">รหัสวัตถุดิบ<input id="editMaterialCode" required class="block w-full border rounded-lg p-2 mt-1 read-only:bg-slate-100"></label>
       <p id="editMaterialCodeHint" class="text-xs text-slate-500"></p>
       <label class="block text-xs font-semibold">ชื่อวัตถุดิบ<input id="editMaterialName" required class="block w-full border rounded-lg p-2 mt-1"></label>
-      <label class="block text-xs font-semibold">หน่วยฐาน<input id="editMaterialUnit" required class="block w-full border rounded-lg p-2 mt-1 read-only:bg-slate-100"></label>
+      <label class="block text-xs font-semibold">หน่วยหลัก<input id="editMaterialUnit" required class="block w-full border rounded-lg p-2 mt-1 read-only:bg-slate-100"></label>
       <p id="editMaterialUnitHint" class="text-xs text-slate-500"></p>
       <p id="editMaterialRecipe" class="text-sm font-semibold text-emerald-700"></p>
       <label class="block text-xs font-semibold">หน่วยที่กรอกในสูตร<select id="editRecipeUnit" onchange="changeRecipeUnit('editRecipeUnit','editMaterialQty')" class="block w-full border rounded-lg p-2 mt-1"></select></label>
@@ -2376,14 +2390,14 @@
     </form>
   </div>
   <script src="vendor/xlsx.full.min.js"></script>
-  <script src="ponn-template.js"></script>
+  <script src="ponn-template.js?v=20261105-recipe-120g"></script>
   <script src="supabase-config.js"></script>
-  <script src="workflow.js?v=20261105-details"></script>
-  <script src="count-units.js?v=20261103-loss-subunit"></script>
+  <script src="workflow.js?v=20261105-delete-scope"></script>
+  <script src="count-units.js?v=20261105-recipe-120g"></script>
   <script src="supabase-store.js?v=20261026-branches"></script>
   <script src="data-cleanup.js?v=20261023-dialog"></script>
   <script src="data-restore.js?v=20261023-dialog"></script>
-  <script src="branch-check.js?v=20261030-file-name"></script>
+  <script src="branch-check.js?v=20261105-branch-details"></script>
   <script src="stock-overview.js?v=20261026-black-grid"></script>
   <script src="critical-layout.js?v=20261025"></script>
   <dialog id="materialMasterDialog" class="ponn-dialog" aria-label="แก้ไขข้อมูลวัตถุดิบหลัก" oncancel="if(masterSaving)event.preventDefault()">
@@ -2400,9 +2414,9 @@
       <div class="ponn-dialog-actions"><button type="button" onclick="document.getElementById('materialMasterDialog').close()">ยกเลิก</button><button type="submit" class="ponn-dialog-ok">บันทึก</button></div>
     </fieldset><p id="masterStatus" role="status" class="text-sm text-rose-600"></p></form>
   </dialog>
-  <script src="material-master.js?v=20261103-picker-refresh"></script>
+  <script src="material-master.js?v=20261105-auto-track"></script>
   <script src="date-display.js?v=20261103-dmy"></script>
-  <script src="report-details.js?v=20261105"></script>
+  <script src="report-details.js?v=20261105-movement-date"></script>
 </body>
 </html>
 

@@ -35,8 +35,44 @@ const COUNT_UNIT_LIST = {
   'FG-100-0241':['ขวด','-',1,null],
   'FG-100-0247':['ขวด','-',1,null]
 };
+// Apply once to saved recipes too. Later edits by an admin must survive reloads.
+async function applySalmonPortions() {
+  if(workflow.salmonPortionVersion===1)return;
+  const code='RM-101-0324';
+  const materials=appState.materials.filter(mat=>mat.code===code);
+  if(!materials.length)return;
+  const ids=new Set(materials.map(mat=>mat.id));
+  const grams=receiptFactor(code,workflow.settings[code]);
+  const netQty=120*grams;
+  const templates=PONN_TEMPLATE.recipes.filter(recipe=>recipe.items.some(item=>item.code===code));
+  const required=new Set(templates.map(recipe=>recipe.menuCode));
+  const before=appState.recipes;
+  const recipes=structuredClone(before);
+  const byCode=new Set(recipes.map(recipe=>recipe.menuCode));
+  for(const source of templates) {
+    if(!byCode.has(source.menuCode))recipes.push({menuId:'ponn-'+source.menuCode,menuCode:source.menuCode,menuName:source.menuName,sellingPrice:0,items:[]});
+  }
+  for(const recipe of recipes) {
+    let line=recipe.items.find(item=>ids.has(item.materialId));
+    if(!line && !required.has(recipe.menuCode))continue;
+    if(!line) {
+      line={materialId:materials[0].id};
+      recipe.items.push(line);
+    }
+    recipe.items=recipe.items.filter(item=>item===line||!ids.has(item.materialId));
+    Object.assign(line,{netQty,yieldRate:100,recipeUnit:'กรัม'});
+    delete line.unitReview;
+  }
+  appState.recipes=recipes;
+  workflow.salmonPortionVersion=1;
+  try {await storeWorkflow();} catch(error) {
+    appState.recipes=before;
+    delete workflow.salmonPortionVersion;
+    throw error;
+  }
+}
 async function applyCountUnitList() {
-  if(workflow.countUnitListVersion===2)return;
+  if(workflow.countUnitListVersion===2)return applySalmonPortions();
   const previous=structuredClone(workflow),materials=structuredClone(appState.materials);
   workflow.countUnitListV2Archive=structuredClone(workflow.settings);
   for(const code of ['RM-101-0508','RM-101-0512','RM-102-0104']){
@@ -50,6 +86,7 @@ async function applyCountUnitList() {
   if(!previous.countUnitListVersion)for(const code of Object.keys(COUNT_UNIT_LIST))if(workflow.settings[code])workflow.settings[code].critical=true;
   workflow.countUnitListVersion=2;
   try{await storeWorkflow();}catch(error){workflow=previous;appState.materials=materials;throw error;}
+  await applySalmonPortions();
 }
 function countUnits(setting, code) {
   if(Array.isArray(setting.countUnits)&&setting.countUnits.length)return setting.countUnits.map(u=>({...u}));

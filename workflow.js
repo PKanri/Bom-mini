@@ -228,6 +228,69 @@ async function commitImportData(){
     $w('excelFileInput').disabled=false;
   }
 }
+function savedImportScopes(batch) {
+  const scopes=new Set(batch.coverage ?? []);
+  if(!batch.coverage){
+    for(const branch of batch.branches){
+      for(const date of dateRange(batch.start,batch.end))scopes.add(importScopeKey({branch,date}));
+    }
+  }
+  for(const row of batch.rows)scopes.add(importScopeKey(row));
+  const excluded=new Set(batch.excludedDates||[]);
+  return [...scopes].map(key=>JSON.parse(key)).filter(([branch,date])=>
+    batch.branches.includes(branch)&&date>=batch.start&&date<=batch.end&&!excluded.has(date));
+}
+function remainingImportBatch(batch,scopes,deletedDates) {
+  const remaining=scopes.filter(([,date])=>!deletedDates.has(date));
+  if(!remaining.length)return null;
+  const dates=remaining.map(([,date])=>date).sort();
+  const rows=batch.rows.filter(row=>!deletedDates.has(row.date));
+  return {...batch,rows,start:dates[0],end:dates.at(-1),
+    branches:[...new Set(remaining.map(([branch])=>branch))],
+    coverage:remaining.map(([branch,date])=>importScopeKey({branch,date})),
+    excludedDates:[...new Set([...(batch.excludedDates||[]),...deletedDates])].sort(),
+    sourceRows:rows.reduce((sum,row)=>sum+(row.sourceCount||1),0)};
+}
+function chooseImportDates(batch,dates) {
+  const dialog=document.createElement('dialog');
+  dialog.className='ponn-dialog';
+  dialog.setAttribute('aria-label','เลือกวันที่จะลบ');
+  const counts=new Map();
+  for(const row of batch.rows)counts.set(row.date,(counts.get(row.date)||0)+(row.sourceCount||1));
+  const month=new Intl.DateTimeFormat('th-TH-u-ca-gregory',{month:'long',year:'numeric',timeZone:'UTC'}).format(new Date(dates[0]+'T00:00:00Z'));
+  dialog.classList.add('import-days');
+  dialog.innerHTML=`<h2>ลบข้อมูลนำเข้า · ${esc(labels[batch.type])}</h2>
+    <p class="import-period">${esc(month)} · ทุกสาขา</p>
+    <fieldset class="import-modes" aria-label="ช่วงที่จะลบ">
+      <label><input type="radio" name="import-delete-mode" value="days" checked> เลือกบางวัน</label>
+      <label><input type="radio" name="import-delete-mode" value="month"> ทั้งเดือน</label>
+    </fieldset>
+    <div class="import-date-list" data-list>${dates.map(date=>`<label><input type="checkbox" value="${esc(date)}"><span>${esc(displayDate(date))}</span><small>${fmt(counts.get(date)||0)} แถว</small></label>`).join('')}</div>
+    <p class="import-selection" role="status" data-summary></p>
+    <div class="ponn-dialog-actions"><button type="button" data-cancel>ยกเลิก</button><button type="button" class="ponn-dialog-ok" data-next disabled>ตรวจสอบก่อนลบ</button></div>`;
+  return new Promise(resolve=>{
+    const next=dialog.querySelector('[data-next]');
+    const monthMode=dialog.querySelector('input[value="month"]');
+    const list=dialog.querySelector('[data-list]');
+    let result=[];
+    let selected=[];
+    function updateSelection(){
+      list.hidden=monthMode.checked;
+      selected=monthMode.checked?dates:[...list.querySelectorAll('input:checked')].map(input=>input.value);
+      const rowCount=selected.reduce((sum,date)=>sum+(counts.get(date)||0),0);
+      dialog.querySelector('[data-summary]').textContent=selected.length
+        ? `เลือก${monthMode.checked?'ทั้งเดือน':''} ${selected.length} วัน · รวม ${fmt(rowCount)} แถว`
+        : 'เลือกวันที่ต้องการลบ';
+      next.disabled=!selected.length;
+    }
+    updateSelection();
+    dialog.onchange=updateSelection;
+    dialog.querySelector('[data-cancel]').onclick=()=>dialog.close();
+    next.onclick=()=>{result=selected.slice();dialog.close();};
+    dialog.addEventListener('close',()=>{dialog.remove();resolve(result);},{once:true});
+    document.body.append(dialog);dialog.showModal();
+  });
+}
 async function deleteSavedImport(key) {
   if(!workflowReady||bomCloud.member?.role!=='admin'||adminImportSaving)return;
   const source=workflow,batch=source.batches[key];
@@ -236,13 +299,27 @@ async function deleteSavedImport(key) {
   renderImportHistory();
   let removed=false;
   try {
-    const confirmed=await appConfirm(`ลบข้อมูลที่บันทึกจากไฟล์ ${batch.file}?\nประเภท: ${labels[batch.type]}\nวันที่ ${batch.start} ถึง ${batch.end} · ${batch.branches.length} สาขา\nลบเฉพาะข้อมูลชุดนี้ ยอดนับที่สาขาบันทึก สูตร BOM และข้อมูลชุดอื่นจะยังอยู่`);
-    if(!confirmed||workflow!==source||source.batches[key]!==batch||bomCloud.member?.role!=='admin')return;
-    delete source.batches[key];removed=true;
+    const scopes=savedImportScopes(batch);
+    const dates=[...new Set(scopes.map(([,date])=>date))].sort();
+    if(!dates.length){await appAlert('ไม่มีวันที่ที่ลบได้ในรายการนี้');return;}
+    const selected=await chooseImportDates(batch,dates);
+    if(!selected.length)return;
+    const toDelete=new Set(selected);
+    const removedRows=batch.rows.filter(r=>toDelete.has(r.date)).reduce((sum,r)=>sum+(r.sourceCount||1),0);
+    const period=batch.month.slice(5)+'/'+batch.month.slice(0,4);
+    const description=selected.length===dates.length
+      ? `ทั้งเดือน ${period} (${dates.length} วันที่มีข้อมูล)`
+      : 'เฉพาะวันที่ '+selected.map(displayDate).join(', ');
+    const confirmed=await appConfirm(`ยืนยันลบข้อมูลนำเข้า ${labels[batch.type]} ทุกสาขา ${description} รวม ${fmt(removedRows)} แถว?`);
+    if(!confirmed||!workflowReady||workflow!==source||source.batches[key]!==batch||bomCloud.member?.role!=='admin')return;
+    const remaining=remainingImportBatch(batch,scopes,toDelete);
+    if(remaining)source.batches[key]=remaining;
+    else delete source.batches[key];
+    removed=true;
     try { await storeWorkflow(); }
     catch(error) { source.batches[key]=batch;removed=false;throw error; }
     if(typeof renderVarianceDashboard==='function')renderVarianceDashboard();
-    appAlert('ลบข้อมูลจากไฟล์ '+batch.file+' ('+labels[batch.type]+') แล้ว');
+    appAlert('ลบข้อมูล '+labels[batch.type]+' '+description+' แล้ว');
   } catch(error) {
     if(!removed)storageError(error);
     else appAlert('ลบข้อมูลแล้ว กรุณาเปิดหน้ารายงานใหม่');
@@ -253,7 +330,7 @@ async function deleteSavedImport(key) {
 }
 function renderImportHistory() {
   renderMissingImportBom();
-  $w('importHistory').innerHTML = Object.entries(workflow.batches).map(([key,b])=>`<li class="flex items-start justify-between gap-2"><span>${esc(labels[b.type])} · ${esc(b.file)} · ${esc(b.start)} ถึง ${esc(b.end)} · ${b.branches.length} สาขา · ${fmt(b.sourceRows)} แถว</span>${bomCloud.member?.role==='admin'?`<button type="button" data-batch-key="${esc(key)}" onclick="deleteSavedImport(this.dataset.batchKey)" class="shrink-0 border border-rose-200 text-rose-600 rounded-lg px-3 py-1 hover:bg-rose-50" ${adminImportSaving?'disabled':''}>ลบ</button>`:''}</li>`).join('') || '<li>ยังไม่มีไฟล์ส่วนกลางที่บันทึก</li>';
+  $w('importHistory').innerHTML = Object.entries(workflow.batches).map(([key,b])=>`<li class="flex items-start justify-between gap-2"><span>${esc(labels[b.type])} · ${esc(b.file)} · ${esc(b.start)} ถึง ${esc(b.end)} · ${b.branches.length} สาขา · ${fmt(b.sourceRows)} แถว</span>${bomCloud.member?.role==='admin'?`<button type="button" data-batch-key="${esc(key)}" onclick="deleteSavedImport(this.dataset.batchKey)" class="shrink-0 border border-rose-200 text-rose-600 rounded-lg px-3 py-1 hover:bg-rose-50" ${adminImportSaving?'disabled':''}>เลือกข้อมูลที่จะลบ</button>`:''}</li>`).join('') || '<li>ยังไม่มีไฟล์ส่วนกลางที่บันทึก</li>';
   if(typeof refreshCleanupPeriods==='function')refreshCleanupPeriods();
 }
 function refreshWorkflowSelectors() {
@@ -273,14 +350,27 @@ function sourceCatalog() {
   Object.values(workflow.batches).filter(b=>b.type!=='SALES').forEach(b=>b.rows.forEach(r=>catalog.set(r.code,r.name)));
   return catalog;
 }
+function criticalMainUnit(code) {
+  const setting=workflow.settings[code];
+  const mat=appState.materials.find(item=>item.code===code);
+  if(!setting && !mat)return {label:'',factor:1};
+  return countUnits(setting||{unit:mat.baseUnit},code)[0] || {label:mat?.baseUnit||setting?.unit||'',factor:1};
+}
+// Supplier receipts for this SKU are weighed in grams (120 g per set, 5 sets per pack).
+const salmonReceiptCode='RM-101-0324';
+function receiptFactor(code,setting) {
+  if(code!==salmonReceiptCode)return setting?.inFactor;
+  const units=countUnits(setting||{},code);
+  return units.find(unit=>unit.label==='กรัม')?.factor ?? units[0].factor/600;
+}
 function renderCriticalSettings() {
   $w('criticalListSummary').textContent='ดูรายการที่ติดตาม ('+Object.values(workflow.settings).filter(s=>s.critical).length+' รายการ)';
   const select = $w('criticalProduct'), previous=select.value;
-  const catalog = sourceCatalog();
-  appState.materials.forEach(m=>catalog.set(m.code,m.name));
+  const catalog = new Map(criticalEntries().map(([code, setting])=>[code, setting.name || code]));
   select.innerHTML = '<option value="">เลือกวัตถุดิบสำคัญ</option>'+[...catalog].sort((a,b)=>a[0].localeCompare(b[0])).map(([code,name])=>`<option value="${esc(code)}">${esc(code)} — ${esc(name)}</option>`).join('');
   if (catalog.has(previous)) select.value=previous;
-  $w('criticalList').innerHTML = Object.entries(workflow.settings).filter(([,s])=>s.critical).map(([code,s])=>`<li class="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 py-2"><span>${esc(code)} · ${esc(s.name)} · หน่วย ${esc(s.unit)} · รับเข้า ${esc(criticalRatioLabel(s.inFactor,s.unit))} / จ่ายออก ${esc(criticalRatioLabel(s.outFactor,s.unit))}</span><button type="button" data-code="${esc(code)}" onclick="removeCriticalProduct(this.dataset.code, this)" class="shrink-0 rounded-lg border border-rose-200 px-3 py-1.5 text-rose-600 hover:bg-rose-50 disabled:opacity-50" aria-label="ลบ ${esc(s.name)} ออกจากวัตถุดิบสำคัญ">ลบออกจากรายการ</button></li>`).join('') || '<li>ยังไม่ได้เลือกวัตถุดิบสำคัญ กรุณากำหนดก่อนตรวจนับและดูผลต่าง</li>';
+  $w('criticalList').innerHTML = Object.entries(workflow.settings).filter(([,s])=>s.critical).map(([code,s])=>{const main=criticalMainUnit(code);return `<li class="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 py-2"><span>${esc(code)} · ${esc(s.name)} · หน่วย ${esc(main.label)} · รับเข้า ${esc(criticalRatioLabel(receiptFactor(code,s)/main.factor,main.label,code===salmonReceiptCode?'กรัม':undefined))} / จ่ายออก ${esc(criticalRatioLabel(s.outFactor/main.factor,main.label))}</span><button type="button" data-code="${esc(code)}" onclick="removeCriticalProduct(this.dataset.code, this)" class="shrink-0 rounded-lg border border-rose-200 px-3 py-1.5 text-rose-600 hover:bg-rose-50 disabled:opacity-50" aria-label="ลบ ${esc(s.name)} ออกจากวัตถุดิบสำคัญ">ลบออกจากรายการ</button></li>`}).join('') || '<li>ยังไม่ได้เลือกวัตถุดิบสำคัญ กรุณากำหนดก่อนตรวจนับและดูผลต่าง</li>';
+  selectCriticalProduct();
 }
 async function removeCriticalProduct(code, button) {
   const setting = workflow.settings[code];
@@ -311,9 +401,9 @@ function readCriticalFactor(direction) {
   const source=Number($w('critical'+direction+'SourceQty').value);
   return Number.isFinite(source)&&source>0 ? 1/source : NaN;
 }
-function criticalRatioLabel(factor,unit) {
+function criticalRatioLabel(factor,unit,sourceLabel='จำนวนในไฟล์') {
   const ratio=criticalFactorRatio(factor);
-  return ratio.source==='' ? 'ยังไม่ตั้งค่า' : `${ratio.source} จำนวนในไฟล์ = ${ratio.base} ${unit}`;
+  return ratio.source==='' ? 'ยังไม่ตั้งค่า' : `${ratio.source} ${sourceLabel} = ${ratio.base} ${unit}`;
 }
 function setCriticalSameUnit(direction) {
   $w('critical'+direction+'SourceQty').value=1;
@@ -327,16 +417,16 @@ function updateCriticalExample() {
     if(!unit || !Number.isFinite(readCriticalFactor(direction))) return label+': ยังตั้งค่าไม่ครบ';
     const source=Number($w('critical'+direction+'SourceQty').value);
     const base=Number($w('critical'+direction+'Factor').value);
-    return `${label}: ถ้าไฟล์ระบุ ${source} จะคิดเป็น ${base} ${unit} ในรายงาน`;
+    return `${label}: ถ้าไฟล์ระบุ ${source}${direction==='In'&&$w('criticalProduct').value===salmonReceiptCode?' กรัม':''} จะคิดเป็น ${base} ${unit} ในรายงาน`;
   }).join(' • ');
 }
 function selectCriticalProduct() {
   const s = workflow.settings[$w('criticalProduct').value];
   $w('criticalSettingsFields').disabled=!$w('criticalProduct').value;
   $w('criticalEnabled').checked = s?.critical ?? true;
-  const mat=appState.materials.find(m=>m.code===$w('criticalProduct').value);
-  const fixedUnit=mat?.baseUnit || s?.unit || '';
-  const units=[...new Set(['g','ml','ชิ้น','กระป๋อง','ฟอง','ขวด',
+  const main=criticalMainUnit($w('criticalProduct').value);
+  const fixedUnit=main.label;
+  const units=[...new Set([fixedUnit,'g','ml','ชิ้น','กระป๋อง','ฟอง','ขวด',
     ...appState.materials.map(m=>m.baseUnit),
     ...Object.values(workflow.settings).map(setting=>setting.unit)].filter(Boolean))];
   $w('criticalUnit').innerHTML='<option value="">เลือกหน่วยจากรายการ</option>'+units.map(unit=>`<option value="${esc(unit)}">${esc(unit)}</option>`).join('');
@@ -345,8 +435,12 @@ function selectCriticalProduct() {
   $w('criticalUnitHint').textContent=fixedUnit
     ? 'ใช้หน่วยเดิมของวัตถุดิบให้อัตโนมัติ ไม่ต้องพิมพ์ใหม่'
     : 'สินค้านี้ยังไม่มีหน่วย กรุณาเลือกจากรายการ หากไม่มี ให้เพิ่มวัตถุดิบใน Master Data ก่อน';
+  const code=$w('criticalProduct').value;
+  $w('criticalInLabel').textContent=code===salmonReceiptCode?'จำนวนกรัมในไฟล์':'กี่หน่วยในไฟล์';
+  $w('criticalInSourceQty').readOnly=code===salmonReceiptCode;
+  $w('criticalInSame').hidden=code===salmonReceiptCode;
   for (const [direction,key] of [['In','inFactor'],['Out','outFactor']]) {
-    const ratio=criticalFactorRatio(s?.[key]);
+    const ratio=criticalFactorRatio((direction==='In'?receiptFactor(code,s):s?.[key])/main.factor);
     $w('critical'+direction+'SourceQty').value=ratio.source;
     $w('critical'+direction+'Factor').value=ratio.base;
   }
@@ -356,17 +450,18 @@ async function saveCriticalProduct() {
   const code=$w('criticalProduct').value;
   const material=appState.materials.find(m=>m.code===code);
   const unit=material?.baseUnit || workflow.settings[code]?.unit || $w('criticalUnit').value.trim();
-  const inFactor=readCriticalFactor('In'), outFactor=readCriticalFactor('Out');
+  const main=criticalMainUnit(code);
+  const inFactor=readCriticalFactor('In')*main.factor, outFactor=readCriticalFactor('Out')*main.factor;
   const cost=workflow.settings[code]?.cost??null;
   if (!code || !unit || !Number.isFinite(inFactor) || !Number.isFinite(outFactor) || inFactor<=0 || outFactor<=0) { appAlert('ระบุหน่วยรายงาน และกรอกจำนวนในไฟล์ของรับเข้าและจ่ายออกให้มากกว่า 0'); return; }
-  const existing=appState.materials.find(m=>m.code===code), name=sourceCatalog().get(code)||existing?.name||code;
+  const existing=appState.materials.find(m=>m.code===code), name=existing?.name||sourceCatalog().get(code)||code;
   const old=workflow.settings[code];
   if (old && old.unit!==unit && Object.values(workflow.counts).some(c=>c[code]!=null)) { appAlert('วัตถุดิบนี้มียอดนับแล้ว ไม่สามารถเปลี่ยนหน่วยฐานได้'); return; }
   const before=structuredClone(workflow), materialsBefore=structuredClone(appState.materials);
   workflow.settings[code]={...old,name,unit,inFactor,outFactor,cost,critical:$w('criticalEnabled').checked};
   if (existing) {
     if (existing.baseUnit!==unit && appState.recipes.some(r=>r.items.some(i=>i.materialId===existing.id))) { workflow=before; appAlert('หน่วยฐานไม่ตรงกับสูตร BOM เดิม กรุณาใช้หน่วยเดียวกัน'); return; }
-    Object.assign(existing,{baseUnit:unit, mainUnit:unit, mainFactor:1, subUnit:unit, subFactor:1, costPerBase:cost??0});
+    existing.costPerBase=cost??0;
   } else appState.materials.push({id:'source-'+code,code,name,category:'วัตถุดิบสำคัญ',baseUnit:unit,mainUnit:unit,mainFactor:1,subUnit:unit,subFactor:1,costPerBase:cost??0});
   try { await storeWorkflow(); renderCriticalSettings(); renderBomModule(); } catch(error) {workflow=before;appState.materials=materialsBefore;storageError(error);}
 }
@@ -427,11 +522,11 @@ function openSelectedMaterialEditor(materialId = $w('ingredientSelectInput').val
   $w('editMaterialQty').value = item?item.netQty/chosenRecipeUnit('editRecipeUnit',mat).factor:'';
   $w('editMaterialYield').value = item?.yieldRate ?? 100;
   const locks = materialEditLocks(mat);
-  for (const [id, value] of [['editMaterialCode',mat.code],['editMaterialName',mat.name],['editMaterialUnit',mat.baseUnit]]) $w(id).value = value;
+  for (const [id, value] of [['editMaterialCode',mat.code],['editMaterialName',mat.name],['editMaterialUnit',locks.unit?(recipeUnits(mat)[0]?.label||mat.baseUnit):mat.baseUnit]]) $w(id).value = value;
   $w('editMaterialCode').readOnly = locks.code;
   $w('editMaterialUnit').readOnly = locks.unit;
   $w('editMaterialCodeHint').textContent = locks.code ? 'รหัสนี้เชื่อมกับข้อมูลนำเข้าหรือยอดตรวจนับแล้ว จึงคงรหัสเดิมไว้' : 'รหัสต้องไม่ซ้ำกับวัตถุดิบอื่น';
-  $w('editMaterialUnitHint').textContent = locks.unit ? 'มีสูตรหรือข้อมูลตรวจนับใช้หน่วยนี้อยู่ จึงคงหน่วยเดิมเพื่อไม่ให้ปริมาณคลาดเคลื่อน' : 'ระบุหน่วยที่ใช้ในสูตร เช่น g, ml หรือชิ้น';
+  $w('editMaterialUnitHint').textContent = locks.unit ? 'หน่วยหลักตามข้อมูลวัตถุดิบ · เลือกหน่วยที่กรอกต่อจานได้ด้านล่าง' : 'ระบุหน่วยที่ใช้ในสูตร เช่น g, ml หรือชิ้น';
   $w('editMaterialError').textContent = '';
   $w('modalEditMaterial').classList.remove('hidden');
 }
@@ -445,7 +540,7 @@ async function saveSelectedMaterial() {
   if (materialEditSaving) return;
   const mat = appState.materials.find(m => m.id === editingMaterialId);
   if (!mat) return;
-  const code = $w('editMaterialCode').value.trim(), name = $w('editMaterialName').value.trim(), unit = $w('editMaterialUnit').value.trim();
+  const code = $w('editMaterialCode').value.trim(), name = $w('editMaterialName').value.trim(), unit = materialEditLocks(mat).unit ? mat.baseUnit : $w('editMaterialUnit').value.trim();
   const recipe = appState.recipes.find(r => r.menuId === editingRecipeId);
   const entryUnit=chosenRecipeUnit('editRecipeUnit',mat);
   const qty = Number($w('editMaterialQty').value)*entryUnit.factor, yieldRate = Number($w('editMaterialYield').value);
@@ -521,7 +616,7 @@ async function applyPonnTemplate() {
     if(!recipe){recipe={menuId:'ponn-'+source.menuCode,menuCode:source.menuCode,sellingPrice:0,items:[]};appState.recipes.push(recipe);}
     recipe.menuName=source.menuName;
     recipe.items=recipe.items.filter(i=>!templateCodes.has(appState.materials.find(m=>m.id===i.materialId)?.code));
-    recipe.items.push(...source.items.map(i=>({materialId:appState.materials.find(m=>m.code===i.code).id,netQty:i.netQty,yieldRate:100,templateRows:i.sourceRows})));
+    recipe.items.push(...source.items.map(i=>({materialId:appState.materials.find(m=>m.code===i.code).id,netQty:i.netQty,yieldRate:100,...(i.recipeUnit?{recipeUnit:i.recipeUnit}:{}),templateRows:i.sourceRows})));
   }
   workflow.branches[PONN_TEMPLATE.branch]=PONN_TEMPLATE.branchName;
   workflow.templateId=PONN_TEMPLATE.id;
@@ -606,9 +701,9 @@ function buildReport(branch,start,end,source=workflow,allowCentralCoverage=true,
     for (const type of ['STOCK_IN','EXTRA_IN','STOCK_OUT']) {
       rowsFor(batches[type],branch,date).forEach(r=>{
         if (totals.has(r.code)) {
-          const total=totals.get(r.code),field=type==='STOCK_OUT'?'out':'in',factor=source.settings[r.code][type==='STOCK_OUT'?'outFactor':'inFactor'],amount=r.qty*factor;
+          const total=totals.get(r.code),field=type==='STOCK_OUT'?'out':'in',factor=field==='out'?source.settings[r.code].outFactor:receiptFactor(r.code,source.settings[r.code]),amount=r.qty*factor;
           total[field]+=amount;
-          total.details[field].push({date,type,code:r.code,name:r.name,qty:r.qty,factor,amount,sourceCount:r.sourceCount||1});
+          total.details[field].push({date,type,excelRow:r.excelRow,code:r.code,name:r.name,qty:r.qty,sourceUnit:field==='in'&&r.code===salmonReceiptCode?'กรัม':r.unit,factor,amount,sourceCount:r.sourceCount||1});
         }
       });
     }
@@ -623,7 +718,7 @@ function buildReport(branch,start,end,source=workflow,allowCentralCoverage=true,
         if (totals.has(mat.code)) {
           const total=totals.get(mat.code),factor=item.netQty/(item.yieldRate/100),amount=sale.qty*factor;
           total.bom+=amount;
-          total.details.bom.push({date,type:'SALES',code:sale.code,name:recipe.menuName||sale.name||sale.code,qty:sale.qty,netQty:item.netQty,yieldRate:item.yieldRate,factor,amount});
+          total.details.bom.push({date,type:'SALES',recipeUnit:item.recipeUnit,excelRow:sale.excelRow,code:sale.code,name:recipe.menuName||sale.name||sale.code,qty:sale.qty,netQty:item.netQty,yieldRate:item.yieldRate,factor,amount});
         }
       });
     });
@@ -634,7 +729,7 @@ function buildReport(branch,start,end,source=workflow,allowCentralCoverage=true,
     const activeDates=availableOnly?dates.filter(date=>Number.isFinite(source.counts[countKey(branch,date)]?.[code]?.qty) || Object.values(source.batches).some(b=>!b.excludedDates?.includes(date)&&rowsFor(b,branch,date).length)):dates;
     const effectiveEnd=activeDates.at(-1)||end;
     const rowIssues=new Set(issues), first=availableOnly?fallback?.count:source.counts[countKey(branch,priorDay(start))]?.[code], last=source.counts[countKey(branch,effectiveEnd)]?.[code];
-    if(!Number.isFinite(s.inFactor)||s.inFactor<=0||!Number.isFinite(s.outFactor)||s.outFactor<=0)rowIssues.add('รหัสใหม่ตามรายการ: รอตรวจอัตราแปลงรับเข้า/จ่ายออก');
+    if(!Number.isFinite(receiptFactor(code,s))||receiptFactor(code,s)<=0||!Number.isFinite(s.outFactor)||s.outFactor<=0)rowIssues.add('รหัสใหม่ตามรายการ: รอตรวจอัตราแปลงรับเข้า/จ่ายออก');
     if(typeof COUNT_UNIT_LIST!=='undefined' && ['RM-101-0256','RM-101-0290','RM-102-0069'].includes(code) && !appState.recipes.some(r=>r.items.some(i=>appState.materials.find(m=>m.id===i.materialId)?.code===code)))rowIssues.add('รอผูกสูตรกับรหัสวัตถุดิบนี้');
     const opening=first?.unitReview?undefined:first?.qty,actual=last?.unitReview?undefined:last?.qty;
     let waste=0;
