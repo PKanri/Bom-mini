@@ -580,7 +580,7 @@ function latestReportCount(source,branch,code,before) {
 function buildReport(branch,start,end,source=workflow,allowCentralCoverage=true,availableOnly=false) {
   const dates=dateRange(start,end), entries=typeof orderedCountEntries==='function'?orderedCountEntries():criticalEntries();
   if (!dates.length || dates.length>366) return [];
-  const issues=new Set(), totals=new Map(entries.map(([code])=>[code,{in:0,out:0,bom:0}]));
+  const issues=new Set(), totals=new Map(entries.map(([code])=>[code,{in:0,out:0,bom:0,details:{in:[],out:[],waste:[],bom:[]}}]));
   for (const date of dates) {
     const batches={};
     for (const type of Object.keys(labels)) {
@@ -605,7 +605,11 @@ function buildReport(branch,start,end,source=workflow,allowCentralCoverage=true,
     }
     for (const type of ['STOCK_IN','EXTRA_IN','STOCK_OUT']) {
       rowsFor(batches[type],branch,date).forEach(r=>{
-        if (totals.has(r.code)) totals.get(r.code)[type==='STOCK_OUT'?'out':'in']+=r.qty*source.settings[r.code][type==='STOCK_OUT'?'outFactor':'inFactor'];
+        if (totals.has(r.code)) {
+          const total=totals.get(r.code),field=type==='STOCK_OUT'?'out':'in',factor=source.settings[r.code][type==='STOCK_OUT'?'outFactor':'inFactor'],amount=r.qty*factor;
+          total[field]+=amount;
+          total.details[field].push({date,type,code:r.code,name:r.name,qty:r.qty,factor,amount,sourceCount:r.sourceCount||1});
+        }
       });
     }
     rowsFor(batches.SALES,branch,date).filter(r=>r.qty!==0).forEach(sale=>{
@@ -616,7 +620,11 @@ function buildReport(branch,start,end,source=workflow,allowCentralCoverage=true,
         if(item.unitReview){issues.add('สูตรเดิมต่างหน่วยจากต้นแบบ กรุณาตรวจปริมาณต่อจานใหม่');return;}
         const mat=appState.materials.find(m=>m.id===item.materialId);
         if (!mat || !Number.isFinite(item.netQty) || item.netQty<=0 || !Number.isFinite(item.yieldRate) || item.yieldRate<=0 || item.yieldRate>100) {issues.add('สูตร BOM หรือ Yield ไม่ถูกต้อง');return;}
-        if (totals.has(mat.code)) totals.get(mat.code).bom+=sale.qty*item.netQty/(item.yieldRate/100);
+        if (totals.has(mat.code)) {
+          const total=totals.get(mat.code),factor=item.netQty/(item.yieldRate/100),amount=sale.qty*factor;
+          total.bom+=amount;
+          total.details.bom.push({date,type:'SALES',code:sale.code,name:recipe.menuName||sale.name||sale.code,qty:sale.qty,netQty:item.netQty,yieldRate:item.yieldRate,factor,amount});
+        }
       });
     });
   }
@@ -630,7 +638,10 @@ function buildReport(branch,start,end,source=workflow,allowCentralCoverage=true,
     if(typeof COUNT_UNIT_LIST!=='undefined' && ['RM-101-0256','RM-101-0290','RM-102-0069'].includes(code) && !appState.recipes.some(r=>r.items.some(i=>appState.materials.find(m=>m.id===i.materialId)?.code===code)))rowIssues.add('รอผูกสูตรกับรหัสวัตถุดิบนี้');
     const opening=first?.unitReview?undefined:first?.qty,actual=last?.unitReview?undefined:last?.qty;
     let waste=0;
-    dates.forEach(date=>{const count=source.counts[countKey(branch,date)]?.[code];if(!count||count.qty==null||count.unitReview){if(!availableOnly)rowIssues.add('รอข้อมูลตรวจนับ/สูญเสียรายวันให้ครบ');}else waste+=count.waste||0;});
+    dates.forEach(date=>{const count=source.counts[countKey(branch,date)]?.[code];if(!count||count.qty==null||count.unitReview){if(!availableOnly)rowIssues.add('รอข้อมูลตรวจนับ/สูญเสียรายวันให้ครบ');}else {
+      const amount=count.waste||0;waste+=amount;
+      if(amount!==0)totals.get(code).details.waste.push({date,type:'COUNT',code,name:s.name,qty:count.loss,unit:count.lossUnit,amount,remarks:count.remarks||''});
+    }});
     if (opening==null) rowIssues.add(`รอยอดนับยกมา ${priorDay(start)}`);
     if (actual==null && !availableOnly) rowIssues.add(`รอยอดนับปลายวัน ${end}`);
     const t=totals.get(code), ready=rowIssues.size===0, theory=ready?opening+t.in-t.out-waste-t.bom:null;
@@ -691,16 +702,16 @@ function reportDisplayRow(row) {
 }
 function reportRowsHtml(rows,withDate) {
   const signed=(value,sign)=>value==null?'—':value===0?'0':sign+fmt(value);
-  return rows.map(sourceRow=>{
+  return rows.map((sourceRow,rowIndex)=>{
     const r=reportDisplayRow(sourceRow),d=stockDifference(r);
     const pct=d.pct==null?'':(d.pct>0?'+':'')+d.pct.toLocaleString('th-TH',{maximumFractionDigits:1})+'%';
     return `<tr class="stock-result-row">${withDate?'<td class="p-3 whitespace-nowrap">'+r.end+'</td>':''}
       <td class="p-3"><strong>${esc(r.name)}</strong><br><small class="text-slate-400">${esc(r.code)}</small><br><small class="text-slate-500">${esc(workflow.branches[r.branch]||r.branch)} (${esc(r.branch)})</small></td>
       <td class="p-3 text-right whitespace-nowrap">${fmt(r.opening)} ${esc(r.unit)}${r.availableOnly?'<br><small class="text-slate-500">ยอดบันทึก '+esc(r.openingDate)+'</small>':''}</td>
-      <td class="p-3 text-right stock-in">${signed(r.in,'+')}</td>
-      <td class="p-3 text-right stock-out">${signed(r.out,'−')}</td>
-      <td class="p-3 text-right stock-out">${signed(r.waste,'−')}</td>
-      <td class="p-3 text-right stock-bom">${signed(r.bom,'−')}</td>
+      <td class="p-3 text-right stock-in"><button type="button" class="report-detail-number" onclick="showReportDetails(${rowIndex},'in')" aria-label="ดูรายละเอียดรับเข้า">${signed(r.in,'+')}</button></td>
+      <td class="p-3 text-right stock-out"><button type="button" class="report-detail-number" onclick="showReportDetails(${rowIndex},'out')" aria-label="ดูรายละเอียดจ่ายออก">${signed(r.out,'−')}</button></td>
+      <td class="p-3 text-right stock-out"><button type="button" class="report-detail-number" onclick="showReportDetails(${rowIndex},'waste')" aria-label="ดูรายละเอียดสูญเสีย">${signed(r.waste,'−')}</button></td>
+      <td class="p-3 text-right stock-bom"><button type="button" class="report-detail-number" onclick="showReportDetails(${rowIndex},'bom')" aria-label="ดูรายละเอียดตัดตามสูตร">${signed(r.bom,'−')}</button></td>
       <td class="p-3 text-right stock-theory">${fmt(r.theory)}</td>
       <td class="p-3 text-right stock-actual">${fmt(r.actual)}${r.availableOnly&&r.actual!=null?'<br><small class="text-slate-500">'+esc(r.effectiveEnd)+'</small>':''}</td>
       <td class="p-3 text-right whitespace-nowrap stock-diff-${d.tone}">${d.qty==null?'—':(d.qty>0?'+':'')+fmt(d.qty)+' '+esc(r.unit)}</td>
