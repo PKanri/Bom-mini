@@ -770,6 +770,7 @@ function renderVarianceDashboard() {
   $w('kpiVariancePct').textContent=String(incomplete);
   $w('kpiWarningItemsCount').textContent=String(ready.filter(r=>r.overuse>0.000001).length);
   $w('varianceTableBody').innerHTML=reportRowsHtml(latestReport,false);
+  if(typeof renderDataFreshness==='function')renderDataFreshness(branch,start,end);
 
 }
 function stockDifference(r) {

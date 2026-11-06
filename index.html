@@ -3,7 +3,8 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 viewBox=%270 0 100 100%27%3E%3Ctext y=%27.9em%27 font-size=%2790%27%3E%F0%9F%8D%B2%3C/text%3E%3C/svg%3E">
+  <link rel="icon" type="image/png" href="logo-ponn.png?v=20261106">
+  <link rel="apple-touch-icon" href="logo-ponn.png?v=20261106">
   <title>ระบบจัดการสูตรอาหาร BOM & สต็อกวัตถุดิบ (Restaurant BOM & Inventory App)</title>
   <script src="https://www.gstatic.com/antigravity/web/dev/tailwindcss.min.js"></script>
   <style>
@@ -610,6 +611,7 @@
               📆 สรุปช่วงวัน (ตั้งแต่วัน... ถึงวัน...)
             </button>
           </div>
+          <span id="adminDataDate" class="text-xs bg-amber-100 text-amber-800 font-semibold px-3 py-1.5 rounded-full whitespace-nowrap"></span>
 
 
         </div>
@@ -666,8 +668,8 @@
       </div>
 
       <!-- Period Badge & Calculation Status Banner -->
-      <div class="flex flex-col sm:flex-row sm:items-center justify-between text-xs bg-slate-100/80 px-4 py-2.5 rounded-xl border border-slate-200 gap-2">
-        <div class="flex items-center gap-2">
+      <div hidden class="flex flex-col sm:flex-row sm:items-center justify-between text-xs bg-slate-100/80 px-4 py-2.5 rounded-xl border border-slate-200 gap-2">
+        <div class="flex flex-wrap items-center gap-2">
           <span class="font-bold text-slate-700">ช่วงเวลาที่ประมวลผล:</span>
           <span id="activePeriodLabel" class="bg-emerald-100 text-emerald-800 font-semibold px-2.5 py-0.5 rounded-full">รายวัน: 11 ตุลาคม 2026</span>
           <span id="activeBranchLabel" class="bg-slate-200 text-slate-700 font-semibold px-2 py-0.5 rounded-md">สาขา สยามพารากอน</span>
@@ -677,7 +679,7 @@
         </div>
       </div>
 
-      <p id="reportReadiness" class="text-sm bg-amber-50 border border-amber-200 rounded-xl p-3">รอข้อมูลส่วนกลางและยอดตรวจนับ</p>
+      <p id="reportReadiness" hidden class="text-sm bg-amber-50 border border-amber-200 rounded-xl p-3">รอข้อมูลส่วนกลางและยอดตรวจนับ</p>
       <!-- KPI Summary Cards -->
       <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <!-- Card 1: Theoretical Cost -->
@@ -714,10 +716,6 @@
       <!-- VIEW 1: SUMMARY TABLE (เมื่อเลือกตารางสรุปรวม) -->
       <div id="varianceSummaryTableView" class="space-y-4">
         <div class="bg-[var(--card,#ffffff)] rounded-2xl border border-[var(--border,#e2e8f0)] shadow-xs overflow-hidden">
-          <div class="p-3.5 bg-slate-50/70 border-b border-slate-200 flex items-center justify-between">
-            <span class="text-xs font-bold text-slate-700">ตารางสรุปผลต่างสต็อกตามช่วงเวลา</span>
-            <span class="text-xs text-slate-400 font-mono">หน่วยหลักตามข้อมูลวัตถุดิบ</span>
-          </div>
           <div class="overflow-x-auto">
             <table class="w-full text-left text-xs">
               <thead class="bg-slate-100"><tr><th class="p-3 whitespace-nowrap ">วัตถุดิบ (Raw Material)</th><th class="p-3 whitespace-nowrap ">ยกมา (Opening)</th><th class="p-3 whitespace-nowrap stock-in">รับเข้า (+)</th><th class="p-3 whitespace-nowrap stock-out">จ่ายออก (−)</th><th class="p-3 whitespace-nowrap stock-out">สูญเสีย (−)</th><th class="p-3 whitespace-nowrap stock-bom">ตัดตามสูตร (−)</th><th class="p-3 whitespace-nowrap stock-theory">สต็อกควรมี</th><th class="p-3 whitespace-nowrap stock-actual">ยอดนับจริง</th><th class="p-3 whitespace-nowrap ">ผลต่าง (Qty)</th><th class="p-3 whitespace-nowrap">การใช้ขาด/เกิน (%)<div class="text-xs font-normal text-slate-500">← ใช้น้อย (−) · ใช้เกิน (+) →<br>(ควรเหลือ − นับจริง) ÷ BOM × 100<br>แถบเต็มที่ ±100%</div></th><th class="p-3 whitespace-nowrap ">สถานะ</th></tr></thead>
@@ -2398,7 +2396,7 @@
   <script src="vendor/xlsx.full.min.js"></script>
   <script src="ponn-template.js?v=20261105-recipe-120g"></script>
   <script src="supabase-config.js"></script>
-  <script src="workflow.js?v=20261105-delete-scope"></script>
+  <script src="workflow.js?v=20261106-fresh"></script>
   <script src="count-units.js?v=20261105-recipe-120g"></script>
   <script src="supabase-store.js?v=20261106-theme"></script>
   <script src="data-cleanup.js?v=20261023-dialog"></script>
@@ -2422,7 +2420,8 @@
   </dialog>
   <script src="material-master.js?v=20261105-auto-track"></script>
   <script src="date-display.js?v=20261103-dmy"></script>
-  <script src="report-details.js?v=20261105-movement-date"></script>
+  <script src="report-details.js?v=20261106-qty-unit"></script>
+  <script src="data-freshness.js?v=20261106-fresh3"></script>
 </body>
 </html>
 
