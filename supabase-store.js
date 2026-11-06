@@ -58,7 +58,7 @@ function cloudRestore(docs) {
 function cloudArrangeNavigation(isBranch) {
   const order=isBranch?['bom','branch-check','count','variance','import','stock-overview']:['bom','import','count','variance','branch-check','stock-overview'];
   const check=$w('nav-tab-branch-check');
-  check.textContent=(isBranch?'2':'5')+'. ตรวจสต็อกก่อนปิดวัน';
+  check.textContent='✅ '+(isBranch?'2':'5')+'. ตรวจสต็อกก่อนปิดวัน';
   const container=check.parentElement;
   if(container)for(const tab of order)container.appendChild($w('nav-tab-'+tab));
 }
@@ -176,7 +176,7 @@ async function cloudLoadMembership(userId) {
 }
 function cloudAuthView(unlocked) {
   document.body.classList.toggle('auth-locked',!unlocked);
-  document.querySelectorAll('section.tab-content, header').forEach(el=>el.inert=!unlocked);
+  document.querySelectorAll('section.tab-content').forEach(el=>el.inert=!unlocked);
   $w('cloudLogin').hidden=unlocked;
   $w('cloudGate').hidden=unlocked;
   $w('cloudActions').hidden=!unlocked;
