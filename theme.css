@@ -1,0 +1,222 @@
+/* Ponn BOM theme: light (blue-gray) + dark. Colors come from variables, so the
+   Tailwind utility classes used by the app switch themes without markup changes. */
+:root,html[data-theme="light"]{
+  color-scheme:light;
+  --background:#eef2f8; --card:#ffffff; --foreground:#0f1b2d; --muted-foreground:#5b6b85; --border:#dde4ef;
+  --glow:rgba(59,130,246,.10);
+  --surface:#ffffff; --surface-2:#f6f8fc; --surface-3:#edf1f8; --surface-4:#e1e8f3;
+  --b1:#e8edf5; --b2:#dde4ef; --b3:#c6d1e3;
+  --t900:#0f1b2d; --t800:#182841; --t700:#2a3c58; --t600:#455773; --t500:#5f7190; --t400:#8796af;
+  --acc-bg-50:#eff5ff; --acc-bg-100:#dbe8fe; --acc-solid:#2563eb; --acc-solid-hover:#1d4ed8; --acc-500:#3b82f6;
+  --acc-t600:#2563eb; --acc-t700:#1d4ed8; --acc-t800:#1e40af; --acc-t900:#1e3a8a; --acc-b200:#bfd6fd; --acc-b300:#93b8fb;
+  --rose-bg-50:#fff1f3; --rose-bg-100:#ffe1e6; --rose-t500:#f43f5e; --rose-t600:#e11d48; --rose-t700:#be123c; --rose-t800:#9f1239; --rose-b200:#fecdd6;
+  --amb-bg-50:#fffbeb; --amb-bg-100:#fef3c7; --amb-t600:#d97706; --amb-t700:#b45309; --amb-t800:#92400e; --amb-t900:#78350f; --amb-b200:#fde68a;
+  --blue-bg-100:#dbeafe; --blue-t800:#1e40af; --indigo-t700:#4338ca;
+  --btn-dark:#1e2f4d; --btn-dark-hover:#12203a;
+  --pos:#059669; --neg:#e11d48; --bom:#4f46e5; --surplus:#1d4ed8; --equal:#047857;
+  --badge-short-bg:#ffe4e6; --badge-short-t:#be123c; --badge-sur-bg:#dbeafe; --badge-sur-t:#1d4ed8;
+  --badge-eq-bg:#d1fae5; --badge-eq-t:#047857; --badge-pend-bg:#fef3c7; --badge-pend-t:#92400e;
+  --actual-bg:#eff5ff; --theory-bg:#f1f5fb; --row-hover:#f5f8fe;
+  --input-bg:#ffffff; --shadow-card:0 1px 2px rgba(15,27,45,.05),0 8px 24px rgba(15,27,45,.05);
+  --scroll-thumb:rgba(15,27,45,.2); --scroll-track:rgba(15,27,45,.04);
+}
+html[data-theme="dark"]{
+  color-scheme:dark;
+  --background:#0a111f; --card:#121b2e; --foreground:#e8eef9; --muted-foreground:#93a3bd; --border:#25334f;
+  --glow:rgba(59,130,246,.14);
+  --surface:#121b2e; --surface-2:#172338; --surface-3:#1e2d47; --surface-4:#2a3b5a;
+  --b1:#1d2a44; --b2:#26354f; --b3:#364a6c;
+  --t900:#f3f6fc; --t800:#e6ecf7; --t700:#d0daea; --t600:#b0bed4; --t500:#8f9eb8; --t400:#6f7f9b;
+  --acc-bg-50:rgba(59,130,246,.13); --acc-bg-100:rgba(59,130,246,.24); --acc-solid:#2563eb; --acc-solid-hover:#3b82f6; --acc-500:#60a5fa;
+  --acc-t600:#7db4fb; --acc-t700:#93c5fd; --acc-t800:#b4d5fe; --acc-t900:#cfe4ff; --acc-b200:rgba(96,165,250,.35); --acc-b300:rgba(96,165,250,.5);
+  --rose-bg-50:rgba(244,63,94,.12); --rose-bg-100:rgba(244,63,94,.22); --rose-t500:#fb7185; --rose-t600:#fb7185; --rose-t700:#fda4af; --rose-t800:#fecdd3; --rose-b200:rgba(244,63,94,.38);
+  --amb-bg-50:rgba(245,158,11,.12); --amb-bg-100:rgba(245,158,11,.22); --amb-t600:#fbbf24; --amb-t700:#fcd34d; --amb-t800:#fde68a; --amb-t900:#fef3c7; --amb-b200:rgba(245,158,11,.38);
+  --blue-bg-100:rgba(59,130,246,.22); --blue-t800:#93c5fd; --indigo-t700:#a5b4fc;
+  --btn-dark:#2c4066; --btn-dark-hover:#3a5385;
+  --pos:#34d399; --neg:#fb7185; --bom:#a5b4fc; --surplus:#7db4fb; --equal:#34d399;
+  --badge-short-bg:rgba(244,63,94,.2); --badge-short-t:#fda4af; --badge-sur-bg:rgba(59,130,246,.22); --badge-sur-t:#93c5fd;
+  --badge-eq-bg:rgba(16,185,129,.2); --badge-eq-t:#6ee7b7; --badge-pend-bg:rgba(245,158,11,.2); --badge-pend-t:#fcd34d;
+  --actual-bg:rgba(59,130,246,.16); --theory-bg:#1b2940; --row-hover:#1a2740;
+  --input-bg:#0d1526; --shadow-card:0 1px 2px rgba(0,0,0,.4),0 8px 24px rgba(0,0,0,.25);
+  --scroll-thumb:rgba(255,255,255,.22); --scroll-track:rgba(255,255,255,.04);
+}
+html .border,html .border-t,html .border-b,html .border-l,html .border-r,html .border-x,html .border-y{border-color:var(--b2)}
+html :where(input,select,textarea){background-color:var(--input-bg);color:var(--foreground)}
+html :where(input,textarea)::placeholder{color:var(--t400);opacity:1}
+html .bg-white{background-color:var(--surface)}
+html .bg-slate-50{background-color:var(--surface-2)}
+html .bg-slate-100{background-color:var(--surface-3)}
+html .bg-slate-200{background-color:var(--surface-4)}
+html .bg-slate-800{background-color:var(--btn-dark)}
+html .bg-emerald-50{background-color:var(--acc-bg-50)}
+html .bg-emerald-100{background-color:var(--acc-bg-100)}
+html .bg-emerald-600{background-color:var(--acc-solid)}
+html .bg-rose-50{background-color:var(--rose-bg-50)}
+html .bg-rose-100{background-color:var(--rose-bg-100)}
+html .bg-amber-50{background-color:var(--amb-bg-50)}
+html .bg-amber-100{background-color:var(--amb-bg-100)}
+html .bg-blue-100{background-color:var(--blue-bg-100)}
+html .bg-slate-50\/90{background-color:color-mix(in srgb,var(--surface-2) 90%,transparent)}
+html .bg-slate-50\/70{background-color:color-mix(in srgb,var(--surface-2) 70%,transparent)}
+html .bg-slate-50\/50{background-color:color-mix(in srgb,var(--surface-2) 50%,transparent)}
+html .bg-slate-100\/80{background-color:color-mix(in srgb,var(--surface-3) 80%,transparent)}
+html .bg-slate-100\/70{background-color:color-mix(in srgb,var(--surface-3) 70%,transparent)}
+html .bg-emerald-50\/70{background-color:color-mix(in srgb,var(--acc-bg-50) 70%,transparent)}
+html .bg-emerald-50\/40{background-color:color-mix(in srgb,var(--acc-bg-50) 40%,transparent)}
+html .bg-emerald-50\/30{background-color:color-mix(in srgb,var(--acc-bg-50) 30%,transparent)}
+html .bg-emerald-100\/70{background-color:color-mix(in srgb,var(--acc-bg-100) 70%,transparent)}
+html .bg-rose-50\/70{background-color:color-mix(in srgb,var(--rose-bg-50) 70%,transparent)}
+html .bg-rose-50\/50{background-color:color-mix(in srgb,var(--rose-bg-50) 50%,transparent)}
+html .hover\:bg-slate-50:hover{background-color:var(--surface-2)}
+html .hover\:bg-slate-200:hover{background-color:var(--surface-4)}
+html .hover\:bg-slate-700:hover{background-color:var(--btn-dark-hover)}
+html .hover\:bg-slate-900:hover{background-color:var(--btn-dark-hover)}
+html .hover\:bg-emerald-700:hover{background-color:var(--acc-solid-hover)}
+html .hover\:bg-emerald-50:hover{background-color:var(--acc-bg-50)}
+html .hover\:bg-rose-50:hover{background-color:var(--rose-bg-50)}
+html .focus\:bg-emerald-50:focus{background-color:var(--acc-bg-50)}
+html .disabled\:bg-slate-200:disabled{background-color:var(--surface-4)}
+html .disabled\:bg-slate-100:disabled{background-color:var(--surface-3)}
+html .disabled\:text-slate-400:disabled{color:var(--t400)}
+html .text-slate-900{color:var(--t900)}
+html .text-slate-800{color:var(--t800)}
+html .text-slate-700{color:var(--t700)}
+html .text-slate-600{color:var(--t600)}
+html .text-slate-500{color:var(--t500)}
+html .text-slate-400{color:var(--t400)}
+html .text-emerald-600{color:var(--acc-t600)}
+html .text-emerald-700{color:var(--acc-t700)}
+html .text-emerald-800{color:var(--acc-t800)}
+html .text-emerald-900{color:var(--acc-t900)}
+html .text-rose-500{color:var(--rose-t500)}
+html .text-rose-600{color:var(--rose-t600)}
+html .text-rose-700{color:var(--rose-t700)}
+html .text-rose-800{color:var(--rose-t800)}
+html .text-amber-600{color:var(--amb-t600)}
+html .text-amber-700{color:var(--amb-t700)}
+html .text-amber-800{color:var(--amb-t800)}
+html .text-amber-900{color:var(--amb-t900)}
+html .text-blue-800{color:var(--blue-t800)}
+html .text-indigo-700{color:var(--indigo-t700)}
+html .hover\:text-slate-600:hover{color:var(--t700)}
+html .hover\:text-rose-700:hover{color:var(--rose-t800)}
+html .hover\:text-emerald-700:hover{color:var(--acc-t800)}
+html .border-slate-100{border-color:var(--b1)}
+html .border-slate-200{border-color:var(--b2)}
+html .border-slate-300{border-color:var(--b3)}
+html .border-emerald-200{border-color:var(--acc-b200)}
+html .border-emerald-300{border-color:var(--acc-b300)}
+html .border-rose-200{border-color:var(--rose-b200)}
+html .border-amber-200{border-color:var(--amb-b200)}
+html .border-slate-200\/60{border-color:color-mix(in srgb,var(--b2) 60%,transparent)}
+html .hover\:border-slate-300:hover{border-color:var(--b3)}
+html .hover\:border-emerald-500:hover{border-color:var(--acc-500)}
+html .divide-slate-100>:not([hidden])~:not([hidden]){border-color:var(--b1)}
+html .focus\:ring-emerald-500:focus{--tw-ring-color:var(--acc-500)}
+
+/* ---------- page, header, cards ---------- */
+html body{background-color:var(--background);background-image:radial-gradient(1100px 380px at 50% -140px,var(--glow),transparent);background-repeat:no-repeat;color:var(--foreground)}
+html body > header{background-color:color-mix(in srgb,var(--card) 90%,transparent);-webkit-backdrop-filter:saturate(1.4) blur(10px);backdrop-filter:saturate(1.4) blur(10px);border-bottom-color:var(--b2)}
+html header .w-10.h-10.bg-emerald-600{background-image:linear-gradient(135deg,#3b82f6,#1d4ed8);box-shadow:0 4px 12px rgba(37,99,235,.35)}
+html .bg-white.rounded-2xl,html .bg-white.rounded-xl{box-shadow:var(--shadow-card)}
+html button.bg-emerald-600,html .bg-emerald-600.rounded-lg{box-shadow:0 1px 2px rgba(37,99,235,.35)}
+html .bg-emerald-600{color:#fff}
+html .tab-btn{transition:background-color .15s,color .15s,border-color .15s}
+html .tab-btn.active{box-shadow:0 1px 2px rgba(37,99,235,.12)}
+::selection{background:var(--acc-bg-100)}
+::-webkit-scrollbar-track{background:var(--scroll-track)}
+::-webkit-scrollbar-thumb{background:var(--scroll-thumb)}
+html a{color:var(--acc-t700)}
+html hr{border-color:var(--b2)}
+
+/* ---------- theme switch (top right) ---------- */
+#themeSwitch{display:inline-flex;gap:2px;padding:3px;margin-left:auto;border:1px solid var(--b2);border-radius:999px;background:var(--surface-3);font-size:12px;line-height:1}
+#themeSwitch button{display:inline-flex;align-items:center;gap:6px;padding:7px 12px;border:0;border-radius:999px;background:transparent;color:var(--t600);font:inherit;font-weight:600;cursor:pointer;white-space:nowrap;transition:background-color .15s,color .15s,box-shadow .15s}
+#themeSwitch button:hover{color:var(--t900)}
+#themeSwitch button[aria-pressed="true"]{background:var(--surface);color:var(--acc-t700);box-shadow:0 1px 3px rgba(15,27,45,.18)}
+#themeSwitch button:focus-visible{outline:2px solid var(--acc-500);outline-offset:1px}
+@media(max-width:520px){#themeSwitch button span.label{display:none}#themeSwitch button{padding:8px 11px}}
+
+/* ---------- app custom classes ---------- */
+html .stock-in,html .bc-results tr > :nth-child(3){color:var(--pos)}
+html .stock-out,html .bc-results tr > :nth-child(4){color:var(--neg)}
+html .stock-bom,html .bc-results tr > :nth-child(5){color:var(--bom)}
+html .stock-theory{background:var(--theory-bg)}
+html .stock-actual{background:var(--actual-bg)}
+html .stock-result-row:hover{background:var(--row-hover)}
+html .stock-diff-short{color:var(--neg)}html .stock-diff-surplus{color:var(--surplus)}html .stock-diff-equal{color:var(--equal)}
+html .stock-badge-short{background:var(--badge-short-bg);color:var(--badge-short-t)}
+html .stock-badge-surplus{background:var(--badge-sur-bg);color:var(--badge-sur-t)}
+html .stock-badge-equal{background:var(--badge-eq-bg);color:var(--badge-eq-t)}
+html .stock-badge-pending{background:var(--badge-pend-bg);color:var(--badge-pend-t)}
+html .stock-issues,html .stock-overview-table small,html .bc-table small,html .bc-results small{color:var(--t500)}
+html .variance-bar{background:var(--surface-2);border-bottom-color:var(--b2)}
+html .variance-bar-axis{border-left-color:var(--t500)}
+html .variance-bar-label{color:var(--t900);text-shadow:none}
+html[data-theme="dark"] .variance-bar-label{text-shadow:0 0 3px #0a111f,0 0 3px #0a111f}
+html[data-theme="light"] .variance-bar-label,:root:not([data-theme]) .variance-bar-label{text-shadow:0 0 3px #fff,0 0 3px #fff}
+html[data-theme="dark"] .variance-bar-negative{background:linear-gradient(to right,rgba(59,130,246,.25),#3b82f6);border-color:#60a5fa}
+html[data-theme="dark"] .variance-bar-positive{background:linear-gradient(to right,#ef4444,rgba(239,68,68,.25));border-color:#f87171}
+
+html .count-mode-switch button{background:var(--surface);border-color:var(--b3);color:var(--t600)}
+html .count-mode-switch button[aria-pressed="true"]{background:var(--acc-bg-50);border-color:var(--acc-solid);color:var(--acc-t700)}
+html #tab-count.count-mobile .count-entry-table tr{background:var(--surface);border-color:var(--b2)}
+html #tab-count.count-mobile .count-entry-table td:nth-child(4){background:var(--actual-bg)}
+html #tab-count.count-mobile .count-mobile-save{background:color-mix(in srgb,var(--surface) 93%,transparent);border-color:var(--b2)}
+html .count-mobile-save button{background:var(--acc-solid)}
+
+html .import-modes label:has(:checked){background:var(--surface);color:var(--acc-t800);box-shadow:0 1px 3px rgba(15,27,45,.2)}
+html .import-days .import-period,html .import-date-list small{color:var(--t600)}
+html .import-days input{accent-color:var(--acc-solid)}
+html .import-date-list{border-color:var(--b2)}
+html .import-date-list label+label{border-top-color:var(--b2)}
+html .import-date-list label:has(:checked){background:var(--acc-bg-50)}
+html .critical-layout-row{border-bottom-color:var(--b2)}
+html .critical-layout-row small{color:var(--t500)}
+html .critical-layout-row button{border-color:var(--b2);background:var(--surface);color:var(--t700)}
+
+html .bc-controls input,html .bc-controls select,html .bc-source button,html .bc-upload{border-color:var(--b3)}
+html .bc-source{border-color:var(--b2)}
+html .bc-table th{background:var(--surface-3)}html .bc-table td{border-bottom-color:var(--b2)}
+html .bc-results{border-top-color:var(--b3);border-left-color:var(--b3)}
+html .bc-results th,html .bc-results td{border-right-color:var(--b3);border-bottom-color:var(--b3)}
+html .bc-results th{background:var(--surface-4);color:var(--t800)}
+html .bc-results td{background:var(--surface)}html .bc-results tr:nth-child(even) td{background:var(--surface-2)}
+html .bc-count input{background:var(--input-bg);border-color:var(--b3);color:var(--foreground)}
+html .bc-count input:focus{outline-color:var(--acc-500)}
+
+html .stock-layout-panel{border-color:var(--b2)}
+html .stock-layout-row{border-color:var(--b2);background:var(--surface-2)}
+html .stock-layout-row button{border-color:var(--b2);background:var(--surface);color:var(--t700)}
+html .stock-overview-scroll-controls{background:var(--surface);border-color:var(--b2)}
+html .stock-overview-scroll-controls button{background:var(--surface);border-color:var(--b2);color:var(--t600)}
+html .stock-overview-scroll-controls button:hover:not(:disabled){background:var(--surface-3);color:var(--t900)}
+html .stock-overview-scroll-controls button:disabled{color:var(--t400)}
+html .stock-overview-table th,html .stock-overview-table td{border-bottom-color:var(--b2);border-right-color:var(--b2)}
+html .stock-overview-table th{background:var(--surface-3);color:var(--t800)}
+html .stock-overview-table th:first-child,html .stock-overview-table td:first-child{background:var(--surface-2)}
+html .stock-overview-table .pending{color:var(--t400)}
+
+html .ponn-dialog{background:var(--surface);color:var(--foreground);border-color:var(--b2)}
+html .ponn-dialog::backdrop{background:rgba(8,14,27,.6)}
+html .ponn-dialog-actions button{background:var(--surface);color:var(--t700);border-color:var(--b3)}
+html .ponn-dialog-actions .ponn-dialog-ok{background:var(--acc-solid);color:#fff;border-color:var(--acc-solid)}
+html .ponn-dialog-actions .ponn-dialog-ok:hover{background:var(--acc-solid-hover)}
+html .report-detail-number:hover{background:var(--surface-3)}
+html .report-details-table th,html .report-details-table td{border-color:var(--b3)}
+html .report-details-table th{background:var(--surface-3)}
+html .report-details-note{color:var(--t500)}
+html body.auth-locked #cloudLoginPanel{border-color:var(--b2);background:var(--card);box-shadow:var(--shadow-card)}
+html #cloudLoginPanel #cloudMessage,html #cloudLoginPanel #cloudGate{color:var(--t500)}
+
+
+html .stock-overview-table td{background:var(--surface);color:var(--foreground)}
+html .stock-overview-table th:first-child,html .stock-overview-table td:first-child{background:var(--surface-2)}
+html .stock-overview-table th{color:var(--t800)}
+html .stock-overview-table .pending{color:var(--t400)}
+
+/* inline-styled elements built in HTML/JS */
+html [style*="background:white"],html [style*="background:#fff"]{background:var(--surface)!important;color:var(--foreground)}
+html [style*="border:1px solid #cbd5e1"]{border-color:var(--b3)!important}
+html[data-theme="dark"] [style*="background:#dcfce7"]{background:var(--badge-eq-bg)!important;color:var(--badge-eq-t)!important}
+html input[type="checkbox"],html input[type="radio"]{accent-color:var(--acc-solid)}

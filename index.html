@@ -3,6 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 viewBox=%270 0 100 100%27%3E%3Ctext y=%27.9em%27 font-size=%2790%27%3E%F0%9F%8D%B2%3C/text%3E%3C/svg%3E">
   <title>ระบบจัดการสูตรอาหาร BOM & สต็อกวัตถุดิบ (Restaurant BOM & Inventory App)</title>
   <script src="https://www.gstatic.com/antigravity/web/dev/tailwindcss.min.js"></script>
   <style>
@@ -92,6 +93,8 @@
 .import-selection{margin:12px 0;font-weight:600}
 .import-days button:disabled{opacity:.45;cursor:default}
 </style>
+  <link rel="stylesheet" href="theme.css?v=20261106-theme">
+  <script src="theme.js?v=20261106-theme"></script>
 </head>
 <body class="auth-locked bg-[var(--background,#f8fafc)] text-[var(--foreground,#0f172a)] antialiased font-sans min-h-screen">
 
@@ -101,9 +104,7 @@
       <div class="flex flex-wrap items-center justify-between gap-3 py-3">
         <!-- Logo & Title -->
         <div class="flex items-center gap-3">
-          <div class="w-10 h-10 rounded-xl bg-emerald-600 flex items-center justify-center text-white shadow-sm font-bold text-lg">
-            🍽️
-          </div>
+          <img src="logo-ponn.png" alt="ป้อน PONN" width="44" height="44" class="w-11 h-11 rounded-xl shadow-sm object-cover flex-shrink-0">
           <div>
             <div class="font-bold text-base sm:text-lg text-[var(--foreground,#0f172a)] flex items-center gap-2">
               Ponn Bom &amp; Inventory Suite
@@ -113,7 +114,12 @@
           </div>
         </div>
 
-        <details id="cloudActions" hidden class="relative ml-auto text-xs text-slate-600">
+        <div id="themeSwitch" role="group" aria-label="โหมดสี">
+          <button type="button" data-theme-value="light" aria-pressed="true" title="โหมดปกติ (สว่าง)"><span aria-hidden="true">☀️</span><span class="label">ปกติ</span></button>
+          <button type="button" data-theme-value="dark" aria-pressed="false" title="โหมดมืด"><span aria-hidden="true">🌙</span><span class="label">มืด</span></button>
+        </div>
+
+        <details id="cloudActions" hidden class="relative text-xs text-slate-600">
           <summary class="cursor-pointer rounded-lg px-3 py-2 hover:bg-slate-50 flex items-center gap-2" aria-label="เมนูบัญชีผู้ใช้">
             <span class="h-2 w-2 rounded-full bg-emerald-500" aria-hidden="true"></span>
             <span id="cloudAccount" class="max-w-[220px] truncate"></span><span aria-hidden="true">▾</span>
@@ -130,19 +136,19 @@
       <!-- MAIN MODULE TABS -->
       <div id="mainModuleTabs" class="flex space-x-1 sm:space-x-4 border-t border-[var(--border,#f1f5f9)] overflow-x-auto py-2">
         <button onclick="switchTab('tab-bom')" id="nav-tab-bom" class="tab-btn active flex items-center gap-2 px-3 py-2 text-xs sm:text-sm font-semibold rounded-lg transition-all text-emerald-700 bg-emerald-50 border border-emerald-200">
-          <span>📋</span> 1. สูตร BOM & Master Data
+          <span>👨‍🍳</span> 1. สูตร BOM & Master Data
         </button>
         <button onclick="switchTab('tab-import')" id="nav-tab-import" class="tab-btn flex items-center gap-2 px-3 py-2 text-xs sm:text-sm font-semibold rounded-lg transition-all text-[var(--muted-foreground,#64748b)] hover:bg-[var(--card,#f8fafc)]">
-          <span>📥</span> 2. ส่วนกลางนำเข้าข้อมูลทุกสาขา
+          <span>🏢</span> 2. ส่วนกลางนำเข้าข้อมูลทุกสาขา
         </button>
         <button onclick="switchTab('tab-count')" id="nav-tab-count" class="tab-btn flex items-center gap-2 px-3 py-2 text-xs sm:text-sm font-semibold rounded-lg transition-all text-[var(--muted-foreground,#64748b)] hover:bg-[var(--card,#f8fafc)]">
-          <span>📝</span> 3. สาขาคีย์ยอดคงเหลือรายวัน
+          <span>📦</span> 3. สาขาคีย์ยอดคงเหลือรายวัน
         </button>
         <button onclick="switchTab('tab-variance')" id="nav-tab-variance" class="tab-btn flex items-center gap-2 px-3 py-2 text-xs sm:text-sm font-semibold rounded-lg transition-all text-[var(--muted-foreground,#64748b)] hover:bg-[var(--card,#f8fafc)]">
-          <span>📊</span> 4. ผลต่างวัตถุดิบสำคัญรายสาขา
+          <span>⚖️</span> 4. ผลต่างวัตถุดิบสำคัญรายสาขา
         </button>
-        <button onclick="switchTab('tab-branch-check')" id="nav-tab-branch-check" class="tab-btn flex items-center gap-2 px-3 py-2 text-xs sm:text-sm font-semibold rounded-lg text-slate-600 whitespace-nowrap">5. ตรวจสต็อกก่อนปิดวัน</button>
-        <button onclick="switchTab('tab-stock-overview')" id="nav-tab-stock-overview" hidden class="tab-btn flex items-center gap-2 px-3 py-2 text-xs sm:text-sm font-semibold rounded-lg text-slate-600 whitespace-nowrap">6. สต็อกคงเหลือแต่ละสาขา</button>
+        <button onclick="switchTab('tab-branch-check')" id="nav-tab-branch-check" class="tab-btn flex items-center gap-2 px-3 py-2 text-xs sm:text-sm font-semibold rounded-lg text-slate-600 whitespace-nowrap"><span>✅</span> 5. ตรวจสต็อกก่อนปิดวัน</button>
+        <button onclick="switchTab('tab-stock-overview')" id="nav-tab-stock-overview" hidden class="tab-btn flex items-center gap-2 px-3 py-2 text-xs sm:text-sm font-semibold rounded-lg text-slate-600 whitespace-nowrap"><span>🏬</span> 6. สต็อกคงเหลือแต่ละสาขา</button>
       </div>
     </div>
   </header>
@@ -224,7 +230,7 @@
       <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-[var(--card,#ffffff)] p-5 rounded-2xl border border-[var(--border,#e2e8f0)] shadow-xs">
         <div>
           <h2 class="text-lg font-bold text-[var(--foreground,#0f172a)] flex items-center gap-2">
-            📋 จัดการสูตรอาหาร (BOM) และวัตถุดิบหลัก (Master Data)
+            👨‍🍳 จัดการสูตรอาหาร (BOM) และวัตถุดิบหลัก (Master Data)
           </h2>
           <p class="text-xs text-[var(--muted-foreground,#64748b)] mt-1">
             กำหนดปริมาณวัตถุดิบต่อจาน หน่วยฐาน และ Yield เพื่อคำนวณยอดใช้ตามสูตรและหาผลต่างการใช้ของแต่ละสาขา
@@ -391,7 +397,7 @@
       <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-[var(--card,#ffffff)] p-5 rounded-2xl border border-[var(--border,#e2e8f0)] shadow-xs">
         <div>
           <h2 class="text-lg font-bold text-[var(--foreground,#0f172a)] flex items-center gap-2">
-            📥 ส่วนกลางอัปโหลดข้อมูลรวมทุกสาขา
+            🏢 ส่วนกลางอัปโหลดข้อมูลรวมทุกสาขา
           </h2>
           <p class="text-xs text-[var(--muted-foreground,#64748b)] mt-1">
             ใช้ไฟล์เดียวที่มีชีต ยอดขาย, stock in, stock out และเครื่องดื่ม in รับเฉพาะรหัสสาขาที่มีในระบบ ข้อมูลวันใหม่เพิ่มต่อจากเดิม หากวันและสาขาซ้ำจะยืนยันแทนที่เฉพาะส่วนนั้น ชีตว่างคงข้อมูลเดิม ประวัติรวมตามประเภทและเดือน
@@ -521,7 +527,7 @@
       <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-[var(--card,#ffffff)] p-5 rounded-2xl border border-[var(--border,#e2e8f0)] shadow-xs">
         <div>
           <h2 class="text-lg font-bold text-[var(--foreground,#0f172a)] flex items-center gap-2">
-            📝 ตรวจนับสต็อกวัตถุดิบประจำวัน (Physical Stock Count)
+            📦 ตรวจนับสต็อกวัตถุดิบประจำวัน (Physical Stock Count)
           </h2>
           <p class="text-xs text-[var(--muted-foreground,#64748b)] mt-1">
             เลือกสาขาและวันที่ แล้วกรอกหน่วยหลักและเศษตามชื่อหน่วยบนแต่ละช่อง ระบบแปลงและรวมยอดให้ รายการที่ไม่มีหน่วยเศษจะปิดช่องไว้ ช่องว่างหมายถึงยังไม่ได้นับ ส่วน 0 หมายถึงนับแล้วไม่เหลือ
@@ -575,7 +581,7 @@
       <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-[var(--card,#ffffff)] p-5 rounded-2xl border border-[var(--border,#e2e8f0)] shadow-xs">
         <div>
           <h2 class="text-lg font-bold text-[var(--foreground,#0f172a)] flex items-center gap-2">
-            📊 รายงานสรุปผลต่างและวิเคราะห์สต็อก (Variance Analysis Dashboard)
+            ⚖️ รายงานสรุปผลต่างและวิเคราะห์สต็อก (Variance Analysis Dashboard)
           </h2>
           <p class="text-xs text-[var(--muted-foreground,#64748b)] mt-1">
             เปรียบเทียบสต็อกที่ควรมีตามทฤษฎี (Theoretical Ending) กับยอดตรวจนับจริง (Physical Count) เพื่อตรวจจับการใช้วัตถุดิบเกินสเปกหรือของสูญหาย
@@ -742,7 +748,7 @@
 
       </style>
       <div class="bg-white rounded-2xl border p-5 space-y-3">
-        <h2 class="text-lg font-bold">ตรวจสต็อกก่อนปิดวัน</h2>
+        <h2 class="text-lg font-bold">✅ ตรวจสต็อกก่อนปิดวัน</h2>
         <p class="text-sm text-slate-600">1. เลือกวัน → 2. อัปโหลดไฟล์ของสาขา → 3. ตรวจยอดขาด/เกิน → 4. บันทึกยอดนับจริงจากหน้านี้</p>
         <p class="text-sm text-slate-600">ไฟล์ที่สาขาอัปโหลดจะรวมทุกรายการของสาขาที่เลือก โดยใช้วันที่บนหน้าจอ ไม่ตรวจวันที่ในไฟล์ หากไฟล์มีหลายวัน ยอดทั้งหมดจะรวมเป็นวันที่เลือก</p>
         <p class="rounded-lg bg-amber-50 p-3 text-sm">กด “บันทึกยอดนับจริง” เพื่อบันทึกยอดนับและของสูญเสียลงระบบได้ทันที ไฟล์อัปโหลดและยอดยกมาที่ทดลองแก้ใช้เฉพาะการตรวจในหน้านี้ และจะล้างเมื่อเปลี่ยนสาขา/วันที่ รีเฟรช หรือออกจากระบบ ไม่ดึงไฟล์จาก Admin</p>
@@ -794,7 +800,7 @@
     </section>
     <section id="tab-stock-overview" class="tab-content hidden space-y-5">
       <div class="bg-white rounded-2xl border p-5 space-y-4">
-        <h2 class="text-lg font-bold">สต็อกคงเหลือแต่ละสาขา</h2>
+        <h2 class="text-lg font-bold">🏬 สต็อกคงเหลือแต่ละสาขา</h2>
         <p class="text-sm text-slate-600">ยอดนับจริงที่บันทึกในหน้า 3 ไม่รวมฉบับร่าง หากวันที่เลือกยังไม่บันทึก จะแสดงยอดบันทึกล่าสุดก่อนวันนั้น พร้อมระบุวันที่บนหัวคอลัมน์ ยอด 0 หมายถึงบันทึกแล้วว่าไม่มีของ</p>
         <div class="flex flex-wrap gap-4 items-end">
           <label>วันที่ดูยอด<input id="stockOverviewDate" type="date" onchange="renderStockOverview()" class="block border rounded-lg p-2"></label>
@@ -827,7 +833,7 @@
     </section>
     <section id="tab-restore" class="tab-content hidden space-y-5">
       <div class="bg-white border border-slate-200 rounded-2xl p-6 space-y-4">
-        <h2 class="text-lg font-bold">นำไฟล์สำรอง JSON กลับมาดูรายงานย้อนหลัง</h2>
+        <h2 class="text-lg font-bold">🗂️ นำไฟล์สำรอง JSON กลับมาดูรายงานย้อนหลัง</h2>
         <p class="text-sm text-slate-600">สำหรับส่วนกลาง: เลือกไฟล์สำรองที่ดาวน์โหลดก่อนลบข้อมูล ตรวจรายการ แล้วกู้คืนเข้า Supabase เพื่อเปิดรายงานในหน้า 4 สูตรคำนวณใช้ BOM ปัจจุบัน ไฟล์สำรองเก่าไม่ได้เก็บสูตรและอาจไม่มียอดยกมาครบ</p>
         <input id="restoreFile" type="file" accept=".json,application/json" onchange="previewRestoreFile(this.files[0])" class="block w-full text-sm">
         <div id="restorePreview" role="status" aria-live="polite" class="bg-slate-50 rounded-xl p-4 text-sm">เลือกไฟล์ JSON เพื่อเริ่มตรวจสอบ</div>
@@ -2394,7 +2400,7 @@
   <script src="supabase-config.js"></script>
   <script src="workflow.js?v=20261105-delete-scope"></script>
   <script src="count-units.js?v=20261105-recipe-120g"></script>
-  <script src="supabase-store.js?v=20261026-branches"></script>
+  <script src="supabase-store.js?v=20261106-theme"></script>
   <script src="data-cleanup.js?v=20261023-dialog"></script>
   <script src="data-restore.js?v=20261023-dialog"></script>
   <script src="branch-check.js?v=20261105-diff-positive-blue"></script>
