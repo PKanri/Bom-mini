@@ -44,7 +44,7 @@ function openCalculationDetails(source,field,files) {
         ? recipeQuantityText({...e,netQty:amount},material)
         : number(amount/factor)+' '+esc(row.unit);
       const yieldInfo=e.yieldRate!==100?`<br><small>Yield ${number(e.yieldRate)}% · เบิกจริง ${recipeQty(e.factor)} ต่อจาน</small>`:'';
-      return `<tr>${origin}${product}<td>${number(e.qty)} จาน</td><td><strong>${recipeQty(e.netQty)}</strong>${yieldInfo}</td><td>${recipeQty(e.amount)}</td>${system}</tr>`;
+      return `<tr>${origin}${product}<td>${number(e.qty)} หน่วย</td><td><strong>${recipeQty(e.netQty)}</strong>${yieldInfo}</td><td>${recipeQty(e.amount)}</td>${system}</tr>`;
     }
     const amounts=field==='waste'?`<td>${esc(e.remarks||'—')}</td>`:`<td>${number(e.qty)} ${esc(e.sourceUnit||'')}</td><td>${number(e.factor/factor)}</td>`;
     if(field==='waste')return `<tr>${product}${amounts}${origin}${system}</tr>`;
