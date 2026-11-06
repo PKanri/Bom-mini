@@ -135,7 +135,7 @@ html hr{border-color:var(--b2)}
 #themeSwitch button:hover{color:var(--t900)}
 #themeSwitch button[aria-pressed="true"]{background:var(--surface);color:var(--acc-t700);box-shadow:0 1px 3px rgba(15,27,45,.18)}
 #themeSwitch button:focus-visible{outline:2px solid var(--acc-500);outline-offset:1px}
-@media(max-width:520px){#themeSwitch button span.label{display:none}#themeSwitch button{padding:8px 11px}}
+#themeSwitch button{padding:7px 11px;font-size:15px}#themeSwitch button span.label{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
 
 /* ---------- app custom classes ---------- */
 html .stock-in,html .bc-results tr > :nth-child(3){color:var(--pos)}
