@@ -29,6 +29,9 @@
     #branchBomUsagePanel .bu-amb{background:var(--badge-pend-bg,#fef3c7);color:var(--badge-pend-t,#92400e)}
     #branchBomUsagePanel .bu-blue{background:var(--badge-sur-bg,#dbeafe);color:var(--badge-sur-t,#1d4ed8)}
     #branchBomUsagePanel .bu-send{border:1px solid var(--acc-b300,#93b8fb);background:var(--acc-bg-50,#eff5ff);color:var(--acc-t700,#1d4ed8);border-radius:10px;padding:5px 12px;font-size:13px;font-weight:700;cursor:pointer;white-space:nowrap}
+    #branchBomUsagePanel .bu-ghost{background:transparent;font-weight:600}
+    #branchBomUsagePanel .bu-link{border:0;background:none;padding:0 2px;font-size:12px;color:var(--acc-t700,#1d4ed8);text-decoration:underline;cursor:pointer}
+    #branchBomUsagePanel .bu-link:disabled{opacity:.5;cursor:default}
     #branchBomUsagePanel .bu-send:disabled{opacity:.5;cursor:default}
     #branchBomUsagePanel .bu-sum{font-size:14px;color:var(--t800,#182841)}
     #branchBomUsagePanel .bu-bar{height:8px;border-radius:999px;background:var(--surface-4,#e1e8f3);overflow:hidden;margin:8px 0 2px}
@@ -85,29 +88,111 @@
 
   let query = '';
   let notice = '';
-  let sending = false;
   const isBranch = () => typeof bomCloud !== 'undefined' && bomCloud.member && bomCloud.member.role === 'branch';
   const reportable = m => m.kind === 'none' || m.kind === 'problem';
   const reported = code => !!(window.menuRequests && window.menuRequests.isReported(code));
-  async function notify(codes) {
-    if (sending || !lastModel || !window.menuRequests) return;
-    const set = new Set(codes);
-    const items = lastModel.notUsed.filter(m => set.has(m.code) && reportable(m) && !reported(m.code)).map(m => ({ code: m.code, name: m.name, qty: m.qty, reason: m.reason }));
-    if (!items.length) return;
-    if (items.length > 1 && typeof appConfirm === 'function' && !await appConfirm('แจ้ง Admin ' + items.length + ' รายการที่ยังไม่มีสูตร BOM หรือไม่?')) return;
-    const ctx = { file: lastModel.file.file || '', date: '' };
-    try { ctx.date = branchCheckScope().date; } catch (e) { /* date is optional */ }
-    sending = true; notice = 'กำลังแจ้ง Admin…'; render(true);
-    try {
-      const n = await window.menuRequests.report(items, ctx);
-      notice = '✓ แจ้ง Admin แล้ว ' + n + ' รายการ ระบบจะนำไปแสดงในหน้า 2 ของ Admin';
-    } catch (e) { notice = 'แจ้งไม่สำเร็จ: ' + e.message; }
-    sending = false; render(true);
+  const nameOf = code => { const m = lastModel && lastModel.notUsed.find(x => x.code === code); return m ? m.name : ''; };
+  const rowOf = code => (lastModel && lastModel.notUsed.find(x => x.code === code)) || null;
+
+  // ---- "แจ้ง Admin" popup: attach recipe photos (optional), then confirm ----
+  let modal = null;
+  function closeModal() {
+    if (!modal) return;
+    const el = modal.el; modal = null;
+    try { if (el.open) el.close(); } catch (e) { /* already closed */ }
+    el.remove();
   }
+  function paintModal() {
+    if (!modal) return;
+    const m = modal, rq = window.menuRequests, max = rq.maxImages, dis = m.busy ? ' disabled' : '';
+    const edit = m.mode === 'edit';
+    const thumbs = m.images.map((src, i) => `<div style="position:relative"><img src="${E(src)}" alt="รูปที่ ${i + 1}" style="width:112px;height:112px;object-fit:cover;border-radius:10px;border:1px solid var(--b3,#c6d1e3);background:#fff;display:block"><button type="button" data-mrm="${i}"${dis} aria-label="ลบรูปที่ ${i + 1}" style="position:absolute;top:-8px;right:-8px;width:24px;height:24px;border-radius:50%;border:1px solid var(--b3,#c6d1e3);background:var(--surface,#fff);color:var(--t800,#182841);font-size:12px;cursor:pointer">✕</button></div>`).join('');
+    const add = m.images.length < max ? `<button type="button" data-madd${dis} style="width:112px;height:112px;border:2px dashed var(--b3,#c6d1e3);border-radius:10px;background:var(--surface-2,#f6f8fc);color:var(--t700,#2a3c58);font-size:13px;cursor:pointer;line-height:1.5">📎<br>เลือกรูป /<br>ถ่ายรูป</button>` : '';
+    $('bmBody').innerHTML = `
+      <h2 style="margin:0 0 12px;font-size:18px;font-weight:700">${edit ? '🖼️ แก้ไขรูปสูตรที่แจ้งไว้' : '🔔 แจ้ง Admin: ยังไม่มีสูตร BOM'}</h2>
+      <div style="border:1px solid var(--b2,#dde4ef);border-radius:12px;padding:10px 12px;background:var(--surface-2,#f6f8fc);margin-bottom:14px">
+        <div style="font-size:12px;opacity:.7">${E(m.code)}</div>
+        <div style="font-weight:700">${E(m.name)}</div>
+        <div style="font-size:13px;margin-top:2px">จำนวนขายในไฟล์ <b>${num(m.qty)}</b>${m.kind === 'none' ? '' : ' · <span style="opacity:.8">' + E(m.reason) + '</span>'}</div>
+      </div>
+      <div style="font-weight:700">แนบรูปสูตร <span style="font-weight:400;opacity:.7">(ไม่บังคับ · สูงสุด ${max} รูป)</span></div>
+      <div style="font-size:12px;opacity:.7;margin:2px 0 8px">ถ่ายหรือเลือกรูปใบสูตรของเมนูนี้ให้เห็นวัตถุดิบและปริมาณชัดเจน เหมือนใบสูตรมาตรฐานที่ใช้อยู่</div>
+      <div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:8px;min-height:30px">${m.loading ? '<span style="font-size:13px;opacity:.7">กำลังโหลดรูปที่แนบไว้…</span>' : thumbs + add}</div>
+      <div role="status" style="font-size:13px;min-height:20px;${m.error ? 'color:var(--rose-t600,#e11d48)' : 'opacity:.8'}">${E(m.error || m.status || '')}</div>
+      <div style="display:flex;justify-content:flex-end;gap:10px;margin-top:14px">
+        <button type="button" data-mcancel${dis} style="color:inherit;background:transparent;border:1px solid var(--b3,#c6d1e3);border-radius:10px;padding:9px 18px">ยกเลิก</button>
+        <button type="button" data-mok class="ponn-dialog-ok" style="background:var(--acc-solid,#2563eb);color:#fff;border:1px solid var(--acc-solid,#2563eb);border-radius:10px;padding:9px 18px;font-weight:700"${dis || (m.loading ? ' disabled' : '')}>${m.busy ? 'กำลังส่ง…' : edit ? 'บันทึกรูป' : 'ยืนยันการแจ้ง Admin'}</button>
+      </div>`;
+  }
+  async function openNotify(code, mode) {
+    const rq = window.menuRequests, row = rowOf(code);
+    if (!rq || !row || modal) return;
+    const el = document.createElement('dialog');
+    el.className = 'ponn-dialog';
+    el.style.cssText = 'width:min(94vw,560px);max-width:94vw;max-height:92vh;overflow:auto;padding:20px';
+    el.innerHTML = '<div id="bmBody"></div><input id="bmFile" type="file" accept="image/*" multiple hidden>';
+    document.body.appendChild(el);
+    modal = { el, code, name: row.name, qty: row.qty, reason: row.reason, kind: row.kind, mode: mode || 'new', images: [], busy: false, loading: mode === 'edit', error: '', status: '' };
+    el.addEventListener('cancel', ev => { if (modal && modal.busy) ev.preventDefault(); });
+    el.addEventListener('close', () => { if (modal && modal.el === el) closeModal(); else el.remove(); });
+    el.addEventListener('click', ev => {
+      if (!modal) return;
+      const t = ev.target;
+      if (t === el && !modal.busy) { closeModal(); return; }
+      if (t.closest('[data-mcancel]')) { closeModal(); return; }
+      if (t.closest('[data-madd]')) { $('bmFile').value = ''; $('bmFile').click(); return; }
+      const rm = t.closest('[data-mrm]');
+      if (rm) { modal.images.splice(Number(rm.dataset.mrm), 1); modal.error = ''; paintModal(); return; }
+      if (t.closest('[data-mok]')) confirmModal();
+    });
+    $('bmFile').addEventListener('change', async ev => {
+      if (!modal) return;
+      const room = rq.maxImages - modal.images.length, picked = [...ev.target.files];
+      if (!picked.length) return;
+      const files = picked.slice(0, room);
+      modal.busy = true; modal.error = ''; modal.status = 'กำลังย่อรูป…'; paintModal();
+      try {
+        for (const f of files) { const u = await rq.compressImage(f); if (!modal) return; modal.images.push(u); }
+        modal.status = picked.length > room ? 'แนบได้สูงสุด ' + rq.maxImages + ' รูป ระบบเลือกเฉพาะรูปแรก ๆ ที่ยังว่างอยู่' : '';
+      } catch (e) { if (modal) modal.error = e.message; }
+      if (modal) { modal.busy = false; paintModal(); }
+    });
+    el.showModal(); paintModal();
+    if (modal && modal.mode === 'edit') {
+      try {
+        const groups = await rq.fetchImages(code);
+        if (modal) modal.images = ((groups[0] && groups[0].images) || []).slice(0, rq.maxImages);
+      } catch (e) { if (modal) modal.error = 'โหลดรูปที่แนบไว้ไม่สำเร็จ: ' + e.message; }
+      if (modal) { modal.loading = false; paintModal(); }
+    }
+  }
+  async function confirmModal() {
+    const m = modal, rq = window.menuRequests;
+    if (!m || m.busy) return;
+    m.busy = true; m.error = ''; m.status = m.mode === 'edit' ? 'กำลังบันทึกรูป…' : 'กำลังแจ้ง Admin…'; paintModal();
+    try {
+      if (m.mode === 'edit') {
+        await rq.setImages(m.code, m.images);
+        notice = m.images.length ? '✓ อัปเดตรูปสูตรของ ' + m.code + ' แล้ว (' + m.images.length + ' รูป)' : 'ลบรูปสูตรของ ' + m.code + ' แล้ว';
+      } else {
+        const ctx = { file: (lastModel && lastModel.file.file) || '', date: '' };
+        try { ctx.date = branchCheckScope().date; } catch (e) { /* date is optional */ }
+        const item = { code: m.code, name: m.name, qty: m.qty, reason: m.reason };
+        if (m.images.length) item.images = m.images;
+        await rq.report([item], ctx);
+        notice = '✓ แจ้ง Admin เรื่อง ' + m.code + ' แล้ว' + (m.images.length ? ' พร้อมรูปสูตร ' + m.images.length + ' รูป' : '') + ' ระบบจะนำไปแสดงในหน้า 2 ของ Admin';
+      }
+      closeModal(); render(true);
+    } catch (e) {
+      if (modal === m) { m.busy = false; m.status = ''; m.error = (m.mode === 'edit' ? 'บันทึกรูปไม่สำเร็จ: ' : 'แจ้งไม่สำเร็จ: ') + e.message; paintModal(); }
+    }
+  }
+
   function notifyCell(m) {
     if (!reportable(m)) return '<span class="bu-sub">—</span>';
-    if (reported(m.code)) return '<span class="bu-badge bu-blue">✓ แจ้งแล้ว</span>';
-    return `<button type="button" class="bu-send" data-bunotify="${E(m.code)}"${sending ? ' disabled' : ''}>🔔 แจ้ง Admin</button>`;
+    if (!reported(m.code)) return `<button type="button" class="bu-send" data-bunotify="${E(m.code)}">🔔 แจ้ง Admin</button>`;
+    const n = window.menuRequests ? window.menuRequests.imageCount(m.code) : 0;
+    return `<div style="display:flex;flex-direction:column;align-items:flex-end;gap:4px"><span class="bu-badge bu-blue">✓ แจ้งแล้ว</span><button type="button" class="bu-link" data-buedit="${E(m.code)}">${n ? '📎 ' + n + ' รูป · ดู/แก้ไข' : '📎 แนบรูปสูตรเพิ่ม'}</button></div>`;
   }
   function bodyHtml(model) {
     const { used, notUsed } = model;
@@ -122,9 +207,9 @@
         used.map((m, i) => [m, i]).filter(([m]) => hit(m)).map(([m, i]) => `<tr class="bu-row" data-bu="${i}" tabindex="0" aria-expanded="false"><td class="r">${i + 1}</td><td>${E(m.code)}</td><td><strong>${E(m.name)}</strong>${m.problems.length ? ' <span class="bu-badge bu-amb">บางวัตถุดิบยังไม่ถูกคิด</span>' : ''}<div class="bu-sub">แถว Excel ${E(xlRows(m.xl))}</div></td><td class="r"><strong>${num(m.qty)}</strong></td><td>${m.items.slice(0, 3).map(d => E(d.name) + ' <b>' + amt(d.amount) + '</b> ' + E(d.unit)).join('<br>')}${m.items.length > 3 ? '<div class="bu-sub">…และอีก ' + (m.items.length - 3) + ' รายการ (กดแถวเพื่อดูทั้งหมด)</div>' : '<div class="bu-sub">กดแถวเพื่อดูรายละเอียด</div>'}</td></tr><tr class="bu-detail" data-bud="${i}" hidden><td></td><td colspan="4"><table><thead><tr><th>รหัสวัตถุดิบ</th><th>ชื่อวัตถุดิบ</th><th class="r">ตัดรวม</th><th>หน่วย</th></tr></thead><tbody>${m.items.map(d => `<tr><td>${E(d.code)}</td><td>${E(d.name)}</td><td class="r"><strong>${amt(d.amount)}</strong></td><td>${E(d.unit)}</td></tr>`).join('')}</tbody></table>${m.problems.length ? '<div class="bu-sub" style="margin-top:6px">⚠️ ' + E(m.problems.join(' / ')) + '</div>' : ''}<div class="bu-sub" style="margin-top:6px">สูตรนี้มีวัตถุดิบ ${m.total} รายการ แสดงเฉพาะที่อยู่ในรายการติดตามของหน้านี้</div></td></tr>`).join('')
       }</tbody></table></div>` : '<p class="bu-sub">ยังไม่มีเมนูในไฟล์ที่ถูกนำไปตัดวัตถุดิบที่ติดตาม</p>';
     } else {
-      const badge = { none: ['bu-red', 'ไม่มีสูตร'], problem: ['bu-amb', 'สูตรไม่พร้อมคิด'], untracked: ['bu-blue', 'ไม่กระทบวัตถุดิบที่ติดตาม'] };
-      body = notUsed.length ? `<div class="bu-wrap"><table><thead><tr><th class="r">#</th><th>รหัสเมนู</th><th>ชื่อเมนู</th><th class="r">จำนวนขาย</th><th>สถานะ / เหตุผล</th>${canNotify ? '<th>แจ้ง Admin</th>' : ''}</tr></thead><tbody>${
-        notUsed.map((m, i) => [m, i]).filter(([m]) => hit(m)).map(([m, i]) => `<tr><td class="r">${i + 1}</td><td>${E(m.code)}</td><td><strong>${E(m.name)}</strong><div class="bu-sub">แถว Excel ${E(xlRows(m.xl))}</div></td><td class="r"><strong>${num(m.qty)}</strong></td><td><span class="bu-badge ${badge[m.kind][0]}">${badge[m.kind][1]}</span><div class="bu-sub" style="margin-top:4px">${E(m.reason)}</div></td>${canNotify ? '<td class="r">' + notifyCell(m) + '</td>' : ''}</tr>`).join('')
+      const badge = { none: ['bu-red', 'ไม่มีสูตร BOM'], problem: ['bu-amb', 'สูตรไม่พร้อมคิด'], untracked: ['bu-blue', 'ไม่กระทบวัตถุดิบที่ติดตาม'] };
+      body = notUsed.length ? `<div class="bu-wrap"><table><thead><tr><th class="r">#</th><th>รหัสเมนู</th><th>ชื่อเมนู</th><th class="r">จำนวนขาย</th><th>สถานะ</th>${canNotify ? '<th>แจ้ง Admin</th>' : ''}</tr></thead><tbody>${
+        notUsed.map((m, i) => [m, i]).filter(([m]) => hit(m)).map(([m, i]) => `<tr><td class="r">${i + 1}</td><td>${E(m.code)}</td><td><strong>${E(m.name)}</strong><div class="bu-sub">แถว Excel ${E(xlRows(m.xl))}</div></td><td class="r"><strong>${num(m.qty)}</strong></td><td><span class="bu-badge ${badge[m.kind][0]}">${badge[m.kind][1]}</span>${m.kind === 'none' ? '' : '<div class="bu-sub" style="margin-top:4px">' + E(m.reason) + '</div>'}</td>${canNotify ? '<td class="r">' + notifyCell(m) + '</td>' : ''}</tr>`).join('')
       }</tbody></table></div>` : '<p class="bu-sub">✅ ทุกเมนูที่ขายถูกนำไปคิดตามสูตรแล้ว</p>';
     }
     const shown = (tab === 'used' ? used : notUsed).filter(hit).length;
@@ -173,8 +258,10 @@
     $('buInfo').textContent = infoText(lastModel);
   });
   document.addEventListener('click', e => {
+    const ed = e.target.closest && e.target.closest('#branchBomUsagePanel [data-buedit]');
+    if (ed) { openNotify(ed.dataset.buedit, 'edit'); return; }
     const nb = e.target.closest && e.target.closest('#branchBomUsagePanel [data-bunotify]');
-    if (nb) { notify([nb.dataset.bunotify]); return; }
+    if (nb) { openNotify(nb.dataset.bunotify, 'new'); return; }
     const t = e.target.closest && e.target.closest('#branchBomUsagePanel [data-butab]');
     if (t) { tab = t.dataset.butab; render(true); return; }
     const row = e.target.closest && e.target.closest('#branchBomUsagePanel tr.bu-row');
