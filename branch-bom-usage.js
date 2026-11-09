@@ -104,7 +104,7 @@
   }
   function paintModal() {
     if (!modal) return;
-    const m = modal, rq = window.menuRequests, max = rq.maxImages, dis = m.busy ? ' disabled' : '';
+    const m = modal, rq = window.menuRequests, max = rq.maxImages || 3, dis = m.busy ? ' disabled' : '';
     const edit = m.mode === 'edit';
     const thumbs = m.images.map((src, i) => `<div style="position:relative"><img src="${E(src)}" alt="รูปที่ ${i + 1}" style="width:112px;height:112px;object-fit:cover;border-radius:10px;border:1px solid var(--b3,#c6d1e3);background:#fff;display:block"><button type="button" data-mrm="${i}"${dis} aria-label="ลบรูปที่ ${i + 1}" style="position:absolute;top:-8px;right:-8px;width:24px;height:24px;border-radius:50%;border:1px solid var(--b3,#c6d1e3);background:var(--surface,#fff);color:var(--t800,#182841);font-size:12px;cursor:pointer">✕</button></div>`).join('');
     const add = m.images.length < max ? `<button type="button" data-madd${dis} style="width:112px;height:112px;border:2px dashed var(--b3,#c6d1e3);border-radius:10px;background:var(--surface-2,#f6f8fc);color:var(--t700,#2a3c58);font-size:13px;cursor:pointer;line-height:1.5">📎<br>เลือกรูป /<br>ถ่ายรูป</button>` : '';
@@ -127,6 +127,7 @@
   async function openNotify(code, mode) {
     const rq = window.menuRequests, row = rowOf(code);
     if (!rq || !row || modal) return;
+    if (typeof rq.compressImage !== 'function') { notice = 'ไฟล์ menu-requests.js บนเว็บเป็นรุ่นเก่า กรุณาอัปโหลด menu-requests.js ตัวใหม่ แล้วกด Ctrl+F5'; render(true); return; }
     const el = document.createElement('dialog');
     el.className = 'ponn-dialog';
     el.style.cssText = 'width:min(94vw,560px);max-width:94vw;max-height:92vh;overflow:auto;padding:20px';
@@ -147,13 +148,13 @@
     });
     $('bmFile').addEventListener('change', async ev => {
       if (!modal) return;
-      const room = rq.maxImages - modal.images.length, picked = [...ev.target.files];
+      const room = (rq.maxImages || 3) - modal.images.length, picked = [...ev.target.files];
       if (!picked.length) return;
       const files = picked.slice(0, room);
       modal.busy = true; modal.error = ''; modal.status = 'กำลังย่อรูป…'; paintModal();
       try {
         for (const f of files) { const u = await rq.compressImage(f); if (!modal) return; modal.images.push(u); }
-        modal.status = picked.length > room ? 'แนบได้สูงสุด ' + rq.maxImages + ' รูป ระบบเลือกเฉพาะรูปแรก ๆ ที่ยังว่างอยู่' : '';
+        modal.status = picked.length > room ? 'แนบได้สูงสุด ' + (rq.maxImages || 3) + ' รูป ระบบเลือกเฉพาะรูปแรก ๆ ที่ยังว่างอยู่' : '';
       } catch (e) { if (modal) modal.error = e.message; }
       if (modal) { modal.busy = false; paintModal(); }
     });
@@ -161,7 +162,7 @@
     if (modal && modal.mode === 'edit') {
       try {
         const groups = await rq.fetchImages(code);
-        if (modal) modal.images = ((groups[0] && groups[0].images) || []).slice(0, rq.maxImages);
+        if (modal) modal.images = ((groups[0] && groups[0].images) || []).slice(0, rq.maxImages || 3);
       } catch (e) { if (modal) modal.error = 'โหลดรูปที่แนบไว้ไม่สำเร็จ: ' + e.message; }
       if (modal) { modal.loading = false; paintModal(); }
     }
