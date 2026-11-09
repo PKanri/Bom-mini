@@ -36,7 +36,10 @@ function openCalculationDetails(source,field,files) {
     : field==='waste' ? ['วัตถุดิบ','หมายเหตุ','วันที่ / แหล่งข้อมูล','ยอดที่ระบบคิด']
     : ['วันที่ / แหล่งข้อมูล','วัตถุดิบ','จำนวนจากไฟล์','อัตราแปลง','ยอดที่ระบบคิด'];
   const body=entries.map(e=>{
-    const product=`<td><strong>${esc(e.name||e.code)}</strong><br><small>${esc(e.code)}</small></td>`;
+    // Movement files carry their own product name; show the master-data name (same as the report row) and keep the file's name as a note.
+    const useMaster=!isBom&&field!=='waste'&&row.name;
+    const fileName=useMaster&&e.name&&e.name!==row.name&&e.name!==e.code?`<br><small>ชื่อในไฟล์: ${esc(e.name)}</small>`:'';
+    const product=`<td><strong>${esc(useMaster?row.name:(e.name||e.code))}</strong><br><small>${esc(e.code)}</small>${fileName}</td>`;
     const origin=`<td>${esc(date(e.date))}<br>${sourceCell(e)}</td>`;
     const system=`<td>${number(e.amount/factor)} ${esc(row.unit)}</td>`;
     if(isBom){
