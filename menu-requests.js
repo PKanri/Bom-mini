@@ -134,6 +134,20 @@
   state.compressImage = compressImage; state.setImages = setImages; state.fetchImages = fetchImages; state.showImages = showImages;
   state.imageCount = code => { const r = state.list.find(x => x.code === code && role() === 'branch' && x.branch === bomCloud.member.branch); return r ? Number(r.image_count) || 0 : 0; };
 
+  // Once a menu has ingredients in the BOM its photos are no longer needed: the admin's page clears them automatically.
+  async function purgeImages(codes) {
+    if (state.purging || state.purgeFailed || !codes.length) return;
+    state.purging = true;
+    try {
+      await cloudRequest('/rest/v1/rpc/bom_purge_menu_images', { method: 'POST', body: JSON.stringify({ codes }) });
+      const set = new Set(codes);
+      for (const r of state.list) if (set.has(r.code)) r.image_count = 0;
+      state.lastPurged = codes.length;
+    } catch (e) { state.purgeFailed = true; state.purgeError = friendly(e); }
+    finally { state.purging = false; }
+    try { window.renderMissingImportBom(); } catch (e) { /* informational */ }
+  }
+  state.purgeImages = purgeImages;
   state.report = report; state.clear = clear; state.load = load; state.reload = load;
   state.isReported = code => role() === 'branch' && state.list.some(r => r.code === code && r.branch === bomCloud.member.branch);
 
@@ -161,6 +175,8 @@
     for (const g of all) g.problem = [...g.reasons].some(t => !NO_RECIPE.test(t));
     // A request disappears once the menu has ingredients, except "recipe not ready" reports that the admin must clear.
     const done = all.filter(g => !g.problem && (recipes.find(x => x.menuCode === g.code) || {}).items?.length);
+    const purgeCodes = done.filter(g => g.images > 0).map(g => g.code);
+    if (purgeCodes.length && state.loaded && recipes.length) purgeImages(purgeCodes);
     const pending = all.filter(g => !done.includes(g)).sort((a, b) => b.qty - a.qty || a.code.localeCompare(b.code, undefined, { numeric: true }));
     const query = (($('missingImportBomSearch') || {}).value || '').trim().toLocaleLowerCase();
     const shown = pending.filter(g => (g.code + ' ' + g.name).toLocaleLowerCase().includes(query));
@@ -168,7 +184,7 @@
     summary.textContent = state.error
       ? state.error
       : !state.loaded ? 'กำลังโหลดรายการที่สาขาแจ้ง…'
-        : `สาขาแจ้งมา ${pending.length} รายการที่ยังไม่มีสูตร` + (done.length ? ` · ทำสูตรแล้ว ${done.length} รายการ (ซ่อนไว้)` : '') + (query ? ` · แสดง ${shown.length} รายการ` : '');
+        : `สาขาแจ้งมา ${pending.length} รายการที่ยังไม่มีสูตร` + (done.length ? ` · ทำสูตรแล้ว ${done.length} รายการ (ซ่อนไว้ และลบรูปที่สาขาส่งมาแล้ว)` : '') + (state.purgeError ? ' · ลบรูปอัตโนมัติไม่สำเร็จ: ' + state.purgeError : '') + (query ? ` · แสดง ${shown.length} รายการ` : '');
     const bn = id => (workflow.branches && workflow.branches[id]) || id;
     const extra = g => [...g.reasons].filter(t => !/^(ยังไม่มีเมนูในสูตร|มีเมนูแล้ว แต่ยังไม่มีวัตถุดิบ)/.test(t)).join(' / ');
     const noRecipe = code => { const r = recipes.find(x => x.menuCode === code); return r ? (r.items && r.items.length ? 'มีสูตรแล้ว แต่สาขาแจ้งว่ายังคิดตามสูตรไม่ได้' : 'มีเมนูแล้ว แต่ยังไม่มีวัตถุดิบในสูตร') : 'ยังไม่มีเมนูในสูตร BOM'; };
