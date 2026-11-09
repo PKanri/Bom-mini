@@ -2,7 +2,7 @@
    (sorted by quantity sold, high to low) and which sold menus were NOT counted, with the reason. */
 (function () {
   'use strict';
-  let tab = 'used';
+  let tab = 'not';
   let lastModel = null;
   const $ = id => document.getElementById(id);
   const num = v => Number(v).toLocaleString('th-TH', { maximumFractionDigits: 2 });
@@ -246,8 +246,8 @@
       <div class="bu-bar" aria-hidden="true"><span style="width:${pct}%"></span></div>
       <div class="bu-sub">ไฟล์ ${E(file.file || '')} · เรียงตามจำนวนขายมากไปน้อย</div>
       <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:10px"><input id="buSearch" type="search" value="${E(query)}" placeholder="🔍 ค้นหารหัสเมนูหรือชื่อเมนู" aria-label="ค้นหาเมนูในไฟล์ยอดขาย" style="flex:1;min-width:220px;max-width:420px;padding:8px 12px;border:1px solid var(--b3,#c6d1e3);border-radius:10px;background:var(--input-bg,#fff);color:var(--t900,#0f1b2d);font-size:14px"><div class="bu-tabs" style="margin:0" role="group" aria-label="เลือกรายการ">
-        <button type="button" class="bu-tab" data-butab="used" aria-pressed="${tab === 'used'}">✅ ถูกนำมาคิด (${used.length})</button>
         <button type="button" class="bu-tab" data-butab="not" aria-pressed="${tab === 'not'}">⚠️ ไม่ถูกนำมาคิด (${notUsed.length})</button>
+        <button type="button" class="bu-tab" data-butab="used" aria-pressed="${tab === 'used'}">✅ ถูกนำมาคิด (${used.length})</button>
       </div><span id="buInfo" class="bu-sub">${E(infoText(model))}</span><span id="buMsg" class="bu-sub">${E(notice || (isBranch() && window.menuRequests && window.menuRequests.error) || '')}</span></div>
       <div id="buBody">${bodyHtml(model)}</div>`;
   }
