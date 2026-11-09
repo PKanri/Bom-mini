@@ -508,11 +508,12 @@
         </div>
       </div>
       <div id="missingImportBomPanel" hidden class="bg-white border border-amber-200 rounded-2xl p-5 space-y-3">
-        <h3 class="font-bold">สินค้าจากยอดขายที่ยังไม่มีสูตร BOM</h3>
+        <h3 class="font-bold">🔔 สินค้าที่สาขาแจ้งว่ายังไม่มีสูตร BOM</h3>
         <input id="missingImportBomSearch" type="search" oninput="renderMissingImportBom()" placeholder="ค้นหารหัสหรือชื่อสินค้า" aria-label="ค้นหาสินค้าที่ยังไม่มีสูตร BOM" class="w-full sm:w-96 border rounded-lg p-3">
+        <button type="button" onclick="menuRequests.reload()" class="ml-2 border border-slate-200 rounded-lg px-3 py-3 text-sm bg-white hover:bg-slate-50" title="โหลดรายการที่สาขาแจ้งล่าสุด">🔄 โหลดล่าสุด</button>
         <p id="missingImportBomSummary" role="status" class="text-sm text-slate-600"></p>
-        <p class="text-sm text-amber-700">รายการเหล่านี้ยังไม่ถูกนำไปคำนวณการใช้วัตถุดิบตาม BOM สามารถนำเข้าได้ และเพิ่มสูตรในหน้า 1 ภายหลัง</p>
-        <div style="overflow:auto;max-height:420px"><table class="w-full text-left text-sm"><thead class="bg-slate-100"><tr><th class="p-3">รหัสสินค้า</th><th class="p-3">ชื่อสินค้า</th><th class="p-3">รายละเอียด</th></tr></thead><tbody id="missingImportBomBody"></tbody></table></div>
+        <p class="text-sm text-amber-700">รายการที่สาขากด “แจ้ง Admin” จากหน้า 5 (ยอดขายที่ยังไม่ถูกนำไปคิดตามสูตร BOM) กด “เพิ่มสูตร” เพื่อสร้างสูตรในหน้า 1 รายการจะหายเองเมื่อมีวัตถุดิบในสูตรแล้ว หรือกด “ลบ” หากไม่ต้องทำสูตร</p>
+        <div style="overflow:auto;max-height:420px"><table class="w-full text-left text-sm"><thead class="bg-slate-100"><tr><th class="p-3">รหัสสินค้า</th><th class="p-3">ชื่อสินค้า / สาขาที่แจ้ง</th><th class="p-3">ยอดขายที่แจ้ง</th><th class="p-3">ดำเนินการ</th></tr></thead><tbody id="missingImportBomBody"></tbody></table></div>
       </div>
     </section>
 
@@ -771,6 +772,7 @@
         </div>
         <div id="branchCheckSources"></div>
         <p id="branchCheckMessage" role="status" class="text-sm text-slate-600"></p>
+        <div id="branchBomUsagePanel" hidden></div>
         <div class="border-t pt-4 space-y-3">
           <h3 class="font-semibold">รายละเอียดไฟล์ที่สาขาอัปโหลด</h3>
           <div class="bc-controls">
@@ -2402,6 +2404,8 @@
   <script src="data-cleanup.js?v=20261023-dialog"></script>
   <script src="data-restore.js?v=20261023-dialog"></script>
   <script src="branch-check.js?v=20261105-diff-positive-blue"></script>
+  <script src="menu-requests.js?v=20261109-req"></script>
+  <script src="branch-bom-usage.js?v=20261109-notify"></script>
   <script src="stock-overview.js?v=20261026-black-grid"></script>
   <script src="critical-layout.js?v=20261025"></script>
   <dialog id="materialMasterDialog" class="ponn-dialog" aria-label="แก้ไขข้อมูลวัตถุดิบหลัก" oncancel="if(masterSaving)event.preventDefault()">
