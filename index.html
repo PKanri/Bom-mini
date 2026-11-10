@@ -794,7 +794,7 @@
         <p class="text-sm">ควรเหลือ = ยกมา + รับเข้า − จ่ายออก − สูญเสีย − ยอดขาย × BOM ปัจจุบัน · ผลต่าง = นับจริง − ควรเหลือ</p>
         <p class="text-xs text-slate-600">ยอดยกมาใช้ยอดนับวันก่อนจากหน้า 3 หากเคยบันทึกยอดนับวันนี้ไว้จะแสดงให้ตรวจแก้ได้ สูตร BOM และหน่วยใช้ชุดเดียวกับระบบ แก้เพื่อทดลองได้ ช่องว่างคือยังไม่ทราบยอด ส่วน 0 คือไม่มีของ สูญเสียเว้นว่างถือว่า 0 หน่วยในตารางผลลัพธ์ใช้หน่วยฐานของ BOM</p>
         <p id="branchCheckSummary" role="status" class="font-semibold"></p>
-        <div style="overflow-x:auto"><table class="bc-results"><colgroup><col style="width:24%"><col style="width:14%"><col style="width:6%"><col style="width:6%"><col style="width:8%"><col style="width:12%"><col style="width:8%"><col style="width:14%"><col style="width:8%"></colgroup><thead><tr><th>วัตถุดิบ</th><th>ยกมา<small id="branchOpeningDate"></small></th><th>itec in + เครื่องดื่ม in</th><th>itec out</th><th>ใช้ตาม BOM</th><th>สูญเสีย</th><th>ควรเหลือ</th><th>นับจริง</th><th>ผลต่าง</th></tr></thead><tbody id="branchCheckBody"></tbody></table></div>
+        <div id="bcResultsWrap" style="overflow-x:auto"><table class="bc-results"><colgroup><col style="width:24%"><col style="width:14%"><col style="width:6%"><col style="width:6%"><col style="width:8%"><col style="width:12%"><col style="width:8%"><col style="width:14%"><col style="width:8%"></colgroup><thead><tr><th>วัตถุดิบ</th><th>ยกมา<small id="branchOpeningDate"></small></th><th>itec in + เครื่องดื่ม in</th><th>itec out</th><th>ใช้ตาม BOM</th><th>สูญเสีย</th><th>ควรเหลือ</th><th>นับจริง</th><th>ผลต่าง</th></tr></thead><tbody id="branchCheckBody"></tbody></table></div>
         <button id="branchSaveCounts" onclick="saveBranchCheckCounts()" class="bg-emerald-600 text-white rounded-lg p-3 disabled:opacity-40">บันทึกยอดนับจริง</button>
         <p id="branchSaveStatus" role="status" class="text-sm text-emerald-700"></p>
       </div>
@@ -2427,6 +2427,25 @@
   <script src="date-display.js?v=20261103-dmy"></script>
   <script src="report-details.js?v=20261110-units"></script>
   <script src="data-freshness.js?v=20261106-fresh3"></script>
+<style id="stickyHeadStyle">
+/* Frozen table headers on pages 4 and 5. Wide screens: header sticks under the app header while the page scrolls.
+   Narrower screens: the table scrolls inside its own box so the header still stays visible. */
+#varianceSummaryTableView > div > .overflow-x-auto,#bcResultsWrap{overflow:auto !important;max-height:calc(100vh - var(--sticky-top,135px) - 16px)}
+#varianceSummaryTableView thead,#bcResultsWrap thead th{position:sticky;top:0;z-index:6}
+@media (min-width:1280px){
+  #varianceSummaryTableView > div{overflow:clip}
+  #varianceSummaryTableView > div > .overflow-x-auto,#bcResultsWrap{overflow:visible !important;max-height:none}
+  #varianceSummaryTableView thead,#bcResultsWrap thead th{top:var(--sticky-top,135px)}
+}
+</style>
+<script>
+(function(){
+  const header=document.querySelector('header');
+  function setStickyTop(){document.documentElement.style.setProperty('--sticky-top',(header?Math.round(header.getBoundingClientRect().height):0)+'px');}
+  setStickyTop();addEventListener('resize',setStickyTop);
+  if(window.ResizeObserver&&header)new ResizeObserver(setStickyTop).observe(header);
+})();
+</script>
 </body>
 </html>
 
