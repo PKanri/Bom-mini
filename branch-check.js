@@ -174,7 +174,7 @@ function ensureBranchCheckScope(scope) {
   if(branchCheckState.scope!==scope.key){
     resetBranchCheck();branchCheckState.scope=scope.key;
     $w('branchCheckUnscoped').checked=false;
-    $w('branchCheckMessage').textContent='เลือกไฟล์ใหม่เมื่อเปลี่ยนสาขาหรือวันที่ ข้อมูลทดลองของวันเดิมถูกล้างแล้ว';
+    $w('branchCheckMessage').textContent='';
   }
 }
 async function zeroBranchCheck(type) {

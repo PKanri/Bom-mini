@@ -182,7 +182,6 @@
     <!-- MODULE 1: BOM & MASTER DATA -->
     <!-- ==================================================================== -->
     <section id="tab-bom" class="tab-content space-y-6">
-      <p class="rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm">สูตร BOM และวัตถุดิบหน้านี้ใช้ร่วมกันทุกสาขา การแก้ไขและบันทึกจะมีผลกับทุกสาขาที่ใช้สูตรนี้</p>
       <div class="bg-white p-5 rounded-2xl border border-slate-200 space-y-3">
         <h2 class="font-bold">วัตถุดิบสำคัญที่ต้องตรวจนับและติดตามผลต่าง</h2>
         <p class="text-sm text-slate-600">ใช้งานประจำวัน: อัปโหลดไฟล์ในหน้า 2 แล้วกรอกยอดตรวจนับในหน้า 3 ระบบคำนวณยอดรับเข้าและจ่ายออกจากไฟล์ให้เอง</p>
@@ -749,16 +748,12 @@
       </style>
       <div class="bg-white rounded-2xl border p-5 space-y-3">
         <h2 class="text-lg font-bold">✅ ตรวจสต็อกก่อนปิดวัน</h2>
-        <p class="text-sm text-slate-600">1. เลือกวัน → 2. อัปโหลดไฟล์ของสาขา → 3. ตรวจยอดขาด/เกิน → 4. บันทึกยอดนับจริงจากหน้านี้</p>
-        <p class="text-sm text-slate-600">ไฟล์ที่สาขาอัปโหลดจะรวมทุกรายการของสาขาที่เลือก โดยใช้วันที่บนหน้าจอ ไม่ตรวจวันที่ในไฟล์ หากไฟล์มีหลายวัน ยอดทั้งหมดจะรวมเป็นวันที่เลือก</p>
-        <p class="rounded-lg bg-amber-50 p-3 text-sm">กด “บันทึกยอดนับจริง” เพื่อบันทึกยอดนับและของสูญเสียลงระบบได้ทันที ไฟล์อัปโหลดและยอดยกมาที่ทดลองแก้ใช้เฉพาะการตรวจในหน้านี้ และจะล้างเมื่อเปลี่ยนสาขา/วันที่ รีเฟรช หรือออกจากระบบ ไม่ดึงไฟล์จาก Admin</p>
         <div class="bc-controls">
           <label>สาขา<select id="branchCheckBranch" onchange="renderBranchCheck()"></select></label>
           <label>วันที่ตรวจ<input id="branchCheckDate" type="date" onchange="renderBranchCheck()"></label>
           <button onclick="exportBranchCheck()" class="bg-slate-800 hover:bg-slate-900 text-white px-3.5 py-2 rounded-xl text-xs font-semibold shadow-xs flex items-center gap-1.5 transition-colors">📑 ส่งออกผลตรวจ Excel</button>
         </div>
-        <p class="text-sm text-slate-600">ไฟล์ยอดขายสรุปที่ไม่มีรหัสสาขา ใช้สาขาที่เลือกด้านบนอัตโนมัติ อ่านจำนวนขายจากคอลัมน์ Number ไม่ต้องแก้ไฟล์ Excel</p>
-        <details><summary class="cursor-pointer text-sm text-slate-600">ไฟล์ประเภทอื่นไม่มีรหัสสาขา หรือไฟล์ระบุสาขาไม่ครบทุกแถว</summary>
+        <details hidden><summary class="cursor-pointer text-sm text-slate-600">ไฟล์ประเภทอื่นไม่มีรหัสสาขา หรือไฟล์ระบุสาขาไม่ครบทุกแถว</summary>
           <label class="block text-sm mt-2"><input id="branchCheckUnscoped" type="checkbox"> ยืนยันว่าไฟล์ที่กำลังเลือกเป็นของสาขาด้านบนเท่านั้น</label>
         </details>
         <div class="border rounded-xl p-3 space-y-2">
@@ -766,10 +761,10 @@
           <div class="flex items-center flex-wrap gap-3 mt-2">
             <button type="button" onclick="document.getElementById('branchWorkbookInput').click()" class="border border-slate-200 rounded-xl px-4 py-2 text-sm bg-white hover:bg-slate-50">เลือกไฟล์ Excel</button>
             <span id="branchWorkbookName" class="text-sm text-slate-600 break-all" aria-live="polite">ยังไม่ได้เลือกไฟล์</span>
+            <button onclick="clearBranchCheckWorkbook()" class="border border-slate-200 rounded-xl px-4 py-2 text-sm bg-white hover:bg-slate-50">ล้างไฟล์ที่อัปโหลด</button>
             <input id="branchWorkbookInput" type="file" accept=".xlsx,.xls" onchange="loadBranchCheckWorkbook(this)" hidden>
           </div>
           <p class="text-sm text-slate-600">ชื่อชีต: ยอดขาย, itec in, itec out, เครื่องดื่ม in · ชีตไม่มีรายการเว้นว่างได้ ระบบถือว่ายอดเป็น 0</p>
-          <button onclick="clearBranchCheckWorkbook()" class="border rounded-lg p-2 text-sm">ล้างไฟล์ที่อัปโหลด</button>
         </div>
         <div id="branchCheckSources"></div>
         <p id="branchCheckMessage" role="status" class="text-sm text-slate-600"></p>
@@ -2404,7 +2399,7 @@
   <script src="supabase-store.js?v=20261106-theme"></script>
   <script src="data-cleanup.js?v=20261023-dialog"></script>
   <script src="data-restore.js?v=20261023-dialog"></script>
-  <script src="branch-check.js?v=20261110-units"></script>
+  <script src="branch-check.js?v=20261110-clean"></script>
   <script src="menu-requests.js?v=20261110-reported"></script>
   <script src="branch-bom-usage.js?v=20261110-warn"></script>
   <script src="stock-overview.js?v=20261026-black-grid"></script>
