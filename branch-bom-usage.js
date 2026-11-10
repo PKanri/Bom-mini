@@ -196,6 +196,7 @@
 
   function notifyCell(m) {
     if (!reportable(m)) return '<span class="bu-sub">—</span>';
+    if (!reported(m.code) && window.menuRequests && window.menuRequests.othersReported && window.menuRequests.othersReported(m.code)) return '<span class="bu-badge bu-blue">✓ มีสาขาอื่นแจ้ง Admin แล้ว</span>';
     if (!reported(m.code)) return `<button type="button" class="bu-send" data-bunotify="${E(m.code)}">🔔 แจ้ง Admin</button>`;
     const n = window.menuRequests ? window.menuRequests.imageCount(m.code) : 0;
     if (!n && window.menuRequests && window.menuRequests.othersHaveImages(m.code)) return `<div style="display:flex;flex-direction:column;align-items:flex-end;gap:4px"><span class="bu-badge bu-blue">✓ แจ้งแล้ว</span><span class="bu-sub">🖼️ มีสาขาแนบรูปสูตรแล้ว</span></div>`;

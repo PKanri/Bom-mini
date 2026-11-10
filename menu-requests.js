@@ -29,6 +29,16 @@
       state.imagedCodes = new Set((Array.isArray(codes) ? codes : []).map(c => typeof c === 'string' ? c : Object.values(c || {})[0]).filter(Boolean));
     } catch (e) { /* SQL not updated yet: behave as before */ }
   }
+  // Codes any branch already reported to the admin (needs bom_reported_menu_codes() from the SQL file).
+  state.reportedCodes = new Set();
+  async function loadReportedCodes() {
+    if (role() !== 'branch') { state.reportedCodes = new Set(); return; }
+    try {
+      const codes = await cloudRequest('/rest/v1/rpc/bom_reported_menu_codes', { method: 'POST', body: '{}' });
+      state.reportedCodes = new Set((Array.isArray(codes) ? codes : []).map(c => typeof c === 'string' ? c : Object.values(c || {})[0]).filter(Boolean));
+    } catch (e) { /* SQL not updated yet: behave as before */ }
+  }
+  state.othersReported = code => state.reportedCodes.has(code) && !state.isReported(code);
   state.othersHaveImages = code => state.imagedCodes.has(code) && state.imageCount(code) === 0;
   async function load() {
     if (typeof bomCloud === 'undefined' || !bomCloud.member) return;
@@ -37,7 +47,7 @@
       try {
         state.list = await cloudRequest('/rest/v1/bom_menu_requests?select=code,branch,name,qty,source_file,report_date,reason,requested_at,image_count&order=requested_at.desc&limit=2000');
         state.error = ''; state.loaded = true;
-        await loadImagedCodes();
+        await Promise.all([loadImagedCodes(), loadReportedCodes()]);
       } catch (e) { state.error = friendly(e); }
       finally { state.loading = null; }
     })();
@@ -64,7 +74,7 @@
         image_count: Array.isArray(i.images) ? i.images.length : (old ? old.image_count || 0 : 0) });
       if (Array.isArray(i.images)) state.drafts.delete(i.code);
     }
-    await loadImagedCodes();
+    await Promise.all([loadImagedCodes(), loadReportedCodes()]);
     return clean.length;
   }
 
