@@ -24,6 +24,8 @@
     #branchBomUsagePanel tr.bu-row:hover td{background:var(--row-hover,#f5f8fe)}
     #branchBomUsagePanel tr.bu-detail td{background:var(--surface-2,#f6f8fc)}
     #branchBomUsagePanel .bu-sub{color:var(--t500,#5f7190);font-size:12px}
+    #branchBomUsagePanel .bu-warn{display:inline-block;margin:2px 0 2px 8px;padding:3px 12px;border-radius:999px;border:1.5px solid #dc2626;background:#fee2e2;color:#b91c1c;font-size:14px;font-weight:800}
+    html[data-theme="dark"] #branchBomUsagePanel .bu-warn{border-color:#f87171;background:rgba(220,38,38,.22);color:#fca5a5}
     #branchBomUsagePanel .bu-badge{display:inline-block;padding:2px 9px;border-radius:999px;font-size:12px;font-weight:700;white-space:nowrap}
     #branchBomUsagePanel .bu-red{background:var(--badge-short-bg,#ffe4e6);color:var(--badge-short-t,#be123c)}
     #branchBomUsagePanel .bu-amb{background:var(--badge-pend-bg,#fef3c7);color:var(--badge-pend-t,#92400e)}
@@ -248,7 +250,7 @@
     if (!model) return;
     const { file, used, notUsed, qUsed, qNot } = model;
     const total = qUsed + qNot, pct = total ? Math.round(qUsed / total * 1000) / 10 : 0;
-    panel.innerHTML = `<h3 class="font-semibold">📋 เมนูในไฟล์ยอดขายกับสูตร BOM</h3>
+    panel.innerHTML = `<h3 class="font-semibold">📋 เมนูในไฟล์ยอดขายกับสูตร BOM <span class="bu-warn">⚠️ (แจ้ง Admin เฉพาะเมนูที่ใช้วัตถุดิบสำคัญเท่านั้น)</span></h3>
       <p class="bu-sum" style="margin-top:6px">ยอดขาย ${used.length + notUsed.length} เมนู · <b>ถูกนำมาคิด ${used.length}</b> · <b>ไม่ถูกนำมาคิด ${notUsed.length}</b> · ครอบคลุม ${pct}% ของจำนวนที่ขาย</p>
       <div class="bu-bar" aria-hidden="true"><span style="width:${pct}%"></span></div>
       <div class="bu-sub">ไฟล์ ${E(file.file || '')} · เรียงตามจำนวนขายมากไปน้อย</div>
