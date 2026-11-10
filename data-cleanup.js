@@ -5,12 +5,15 @@ let cleanupBusy=false;
 function cleanupSelection() {
   return $w('cleanupMode').value==='range'?`${$w('cleanupStart').value} ถึง ${$w('cleanupEnd').value}`:$w('cleanupPeriod').value;
 }
-function makeRangeCleanupPlan(documents,start,end) {
+function makeRangeCleanupPlan(documents,start,end,keepLast) {
   const valid=d=>/^\d{4}-\d{2}-\d{2}$/.test(d)&&Number(d.slice(0,4))>=1900&&!isNaN(Date.parse(d))&&new Date(d).toISOString().slice(0,10)===d;
   if(!valid(start)||!valid(end)||start>end)throw Error('เลือกวันที่เริ่มต้นและสิ้นสุดให้ถูกต้อง');
-  const remove=[],updates=[];
+  const remove=[],updates=[],retained=[];
   for(const doc of documents) {
-    if(doc.kind==='count') {if(doc.period>=start&&doc.period<=end)remove.push(doc);continue;}
+    if(doc.kind==='count') {
+      if(doc.period>=start&&doc.period<=end){if(keepLast&&doc.period===end)retained.push(doc);else remove.push(doc);}
+      continue;
+    }
     if(!['SALES','STOCK_IN','STOCK_OUT','EXTRA_IN'].includes(doc.kind))continue;
     const p=doc.payload;
     if(!valid(p.start)||!valid(p.end)||!Array.isArray(p.rows))throw Error('ข้อมูลไฟล์นำเข้าไม่สมบูรณ์ กรุณาตรวจสอบก่อนลบ');
@@ -22,7 +25,7 @@ function makeRangeCleanupPlan(documents,start,end) {
     if(!remaining.length){remove.push(doc);continue;}
     updates.push({before:doc,after:{...doc,payload:{...p,start:remaining[0],end:remaining.at(-1),excludedDates:[...excluded].sort(),rows:p.rows.filter(r=>r.date<start||r.date>end)}}});
   }
-  return {period:`${start} ถึง ${end}`,end,range:true,remove,updates,retained:[]};
+  return {period:`${start} ถึง ${end}`,end,range:true,keepLast:!!keepLast,remove,updates,retained};
 }
 function cleanupAffected(plan) {return [...plan.remove,...(plan.updates||[]).map(u=>u.before)];}
 function cleanupPeriods() {
@@ -40,6 +43,7 @@ function resetCleanupPreview() {
   const range=$w('cleanupMode').value==='range';
   $w('cleanupStartField').hidden=!range;$w('cleanupEndField').hidden=!range;
   $w('cleanupStart').disabled=!range;$w('cleanupEnd').disabled=!range;
+  $w('cleanupKeepLastField').hidden=!range;$w('cleanupKeepLast').disabled=!range;
   $w('cleanupPeriodField').hidden=range;$w('cleanupPeriod').disabled=range;
   $w('cleanupConfirmHint').textContent=range?'2. พิมพ์ช่วงที่เลือก เช่น 2026-10-01 ถึง 2026-10-02':'2. พิมพ์เดือนหรือปีที่เลือก เช่น 2026-10 หรือ 2026';
   cleanupPlan=null;cleanupBackupRequested=false;
@@ -74,12 +78,12 @@ async function prepareCleanup() {
       docs.push(...rows);if(rows.length<500)break;
     }
     if(cleanupSelection()!==period)return;
-    cleanupPlan=range?makeRangeCleanupPlan(docs,start,end):makeCleanupPlan(docs,period);
+    cleanupPlan=range?makeRangeCleanupPlan(docs,start,end,$w('cleanupKeepLast').checked):makeCleanupPlan(docs,period);
     const affected=cleanupAffected(cleanupPlan);
     const groups={};affected.forEach(r=>groups[r.kind]=(groups[r.kind]||0)+1);
     const branches=new Set(cleanupPlan.remove.map(r=>r.branch));
     $w('cleanupPreview').innerHTML=`<strong>ช่วง ${esc(period)} · ทุกสาขา · จะลบ ${cleanupPlan.remove.length} แถวจัดเก็บ จาก ${branches.size} สาขา</strong><ul class="list-disc pl-5 mt-2">${Object.entries(groups).map(([kind,n])=>`<li>${esc(kind==='count'?'ยอดนับรายวัน':labels[kind])}: ${n} แถวจัดเก็บ</li>`).join('')}</ul><p class="mt-2">คงยอดนับวันที่ ${cleanupPlan.end}: ${cleanupPlan.retained.length} แถว เพื่อใช้เป็นยอดยกมาของช่วงถัดไป และคงข้อมูลสูตร BOM/วัตถุดิบทั้งหมด</p><p>เมื่อไม่มีข้อมูลช่วงนี้แล้ว จะเปิดรายงานย้อนหลังของช่วงนี้ไม่ได้ครบเหมือนเดิม</p>`;
-    if(range)$w('cleanupPreview').innerHTML=`<strong>ลบช่วง ${esc(period)} · ทุกสาขา</strong><p>ลบทั้งแถวจัดเก็บ ${cleanupPlan.remove.length} แถว และลบเฉพาะวันที่ในไฟล์รายเดือน ${cleanupPlan.updates.length} แถวจัดเก็บ</p><p>รวมยอดนับวันสิ้นสุดด้วย เก็บข้อมูลนอกช่วงและสูตร BOM ไว้ รายงานที่ต้องใช้ยอดนับที่ลบเป็นยอดยกมาจะรอข้อมูล</p><p>พิมพ์ยืนยัน: <strong>${esc(period)}</strong></p>`;
+    if(range)$w('cleanupPreview').innerHTML=`<strong>ลบช่วง ${esc(period)} · ทุกสาขา</strong><p>ลบทั้งแถวจัดเก็บ ${cleanupPlan.remove.length} แถว และลบเฉพาะวันที่ในไฟล์รายเดือน ${cleanupPlan.updates.length} แถวจัดเก็บ</p><p>${cleanupPlan.keepLast?`เก็บยอดนับวันที่ ${esc(end)} ไว้ ${cleanupPlan.retained.length} แถว เพื่อใช้เป็นยอดยกมาของวันถัดไป · `:'รวมยอดนับวันสิ้นสุดด้วย · '}เก็บข้อมูลนอกช่วงและสูตร BOM ไว้${cleanupPlan.keepLast?'':' รายงานที่ต้องใช้ยอดนับที่ลบเป็นยอดยกมาจะรอข้อมูล'}</p><p>พิมพ์ยืนยัน: <strong>${esc(period)}</strong></p>`;
     if(affected.length>10000)throw Error('ข้อมูลเกิน 10,000 แถวจัดเก็บ กรุณาเลือกช่วงสั้นลง');
     $w('cleanupBackup').disabled=!affected.length;
   }catch(error){cleanupPlan=null;$w('cleanupPreview').textContent='ตรวจข้อมูลไม่สำเร็จ: '+error.message;}
@@ -101,7 +105,7 @@ async function deleteCleanupPeriod() {
   updateCleanupConfirmation();if($w('cleanupDelete').disabled)return;
   const plan=cleanupPlan;
   if(cleanupSelection()!==plan.period){resetCleanupPreview();return;}
-  if(!await appConfirm(`ลบข้อมูล ${plan.period} ทุกสาขา กระทบ ${cleanupAffected(plan).length} แถวจัดเก็บจาก Supabase?\n${plan.range?'ลบยอดนับทุกวันในช่วง รวมวันสิ้นสุด':`เก็บยอดนับ ${plan.end} ไว้`} · เก็บสูตร BOM\nข้อมูลที่กรอกแต่ยังไม่บันทึกในหน้านี้จะถูกยกเลิก`))return;
+  if(!await appConfirm(`ลบข้อมูล ${plan.period} ทุกสาขา กระทบ ${cleanupAffected(plan).length} แถวจัดเก็บจาก Supabase?\n${plan.range&&!plan.keepLast?'ลบยอดนับทุกวันในช่วง รวมวันสิ้นสุด':`เก็บยอดนับ ${plan.end} ไว้`} · เก็บสูตร BOM\nข้อมูลที่กรอกแต่ยังไม่บันทึกในหน้านี้จะถูกยกเลิก`))return;
   cleanupBusy=true;updateCleanupConfirmation();
   let committed=false;
   try {
@@ -116,7 +120,7 @@ async function deleteCleanupPeriod() {
     await cloudLoad();
     latestReport=[];visibleVarianceRows=[];renderVarianceDashboard();
     resetCleanupPreview();
-    $w('cleanupPreview').textContent=`ลบข้อมูล ${plan.period} แล้ว ${changes.length} แถวจัดเก็บ · ${plan.range?'คงข้อมูลนอกช่วงและสูตร BOM':`คงยอดนับ ${plan.end} และสูตร BOM`}`;
+    $w('cleanupPreview').textContent=`ลบข้อมูล ${plan.period} แล้ว ${changes.length} แถวจัดเก็บ · ${plan.range&&!plan.keepLast?'คงข้อมูลนอกช่วงและสูตร BOM':`คงยอดนับ ${plan.end} และสูตร BOM`}`;
   }catch(error){
     workflowReady=false;cleanupPlan=null;cleanupBackupRequested=false;
     $w('cleanupPreview').textContent=(committed?'ลบสำเร็จแล้ว แต่โหลดข้อมูลล่าสุดไม่สำเร็จ: ':'ยังยืนยันผลการลบไม่ได้: ')+error.message+' · กดโหลดข้อมูลล่าสุดและตรวจสอบก่อนทำรายการใหม่';

@@ -410,11 +410,12 @@
       <!-- Import Type Selector & Upload Box -->
       <details class="bg-white border border-rose-200 rounded-2xl p-5 space-y-3">
         <summary class="font-bold text-rose-700 cursor-pointer">จัดการข้อมูลย้อนหลัง — ลบตามเดือน / ปี / ช่วงวันที่</summary>
-        <p class="text-sm text-slate-600">ลบข้อมูลยอดขาย รับเข้า จ่ายออก เครื่องดื่ม และยอดนับของทุกสาขา โดยคงสูตร BOM ไว้ โหมดเดือน/ปีเก็บยอดนับวันสุดท้ายเป็นยอดยกมา ส่วนโหมดช่วงวันที่ลบทุกวันที่เลือก รวมวันสิ้นสุด และคงข้อมูลนอกช่วง</p>
+        <p class="text-sm text-slate-600">ลบข้อมูลยอดขาย รับเข้า จ่ายออก เครื่องดื่ม และยอดนับของทุกสาขา โดยคงสูตร BOM ไว้ โหมดเดือน/ปีเก็บยอดนับวันสุดท้ายเป็นยอดยกมา ส่วนโหมดช่วงวันที่ลบทุกวันที่เลือก (ติ๊กเก็บยอดนับวันสุดท้ายของช่วงไว้เป็นยอดยกมาได้) และคงข้อมูลนอกช่วง</p>
         <div class="flex flex-wrap gap-3 items-center">
-          <label>รูปแบบ <select id="cleanupMode" onchange="resetCleanupPreview()" class="border rounded-lg p-2"><option value="period">เดือน / ปี (เก็บยอดนับวันสุดท้าย)</option><option value="range">ช่วงวันที่ (ลบทุกวันในช่วง)</option></select></label>
+          <label>รูปแบบ <select id="cleanupMode" onchange="resetCleanupPreview()" class="border rounded-lg p-2"><option value="period">เดือน / ปี (เก็บยอดนับวันสุดท้าย)</option><option value="range">ช่วงวันที่ (เลือกเก็บยอดนับวันสุดท้ายได้)</option></select></label>
           <label id="cleanupStartField" hidden>ตั้งแต่วันที่ <input id="cleanupStart" type="date" disabled onchange="resetCleanupPreview()" class="border rounded-lg p-2"></label>
           <label id="cleanupEndField" hidden>ถึงวันที่ <input id="cleanupEnd" type="date" disabled onchange="resetCleanupPreview()" class="border rounded-lg p-2"></label>
+          <label id="cleanupKeepLastField" hidden class="flex items-center gap-2"><input id="cleanupKeepLast" type="checkbox" checked disabled onchange="resetCleanupPreview()"> เก็บยอดนับวันสุดท้ายของช่วงไว้เป็นยอดยกมา</label>
           <label id="cleanupPeriodField">เดือนหรือปี (ค.ศ.) <select id="cleanupPeriod" onchange="resetCleanupPreview()" class="border rounded-lg p-2"><option value="">รอโหลดข้อมูล</option></select></label>
           <button onclick="prepareCleanup()" class="border rounded-lg px-3 py-2">ตรวจข้อมูลก่อนลบ</button>
         </div>
@@ -2397,7 +2398,7 @@
   <script src="workflow.js?v=20261110-link4"></script>
   <script src="count-units.js?v=20261105-recipe-120g"></script>
   <script src="supabase-store.js?v=20261106-theme"></script>
-  <script src="data-cleanup.js?v=20261023-dialog"></script>
+  <script src="data-cleanup.js?v=20261110-keeplast"></script>
   <script src="data-restore.js?v=20261023-dialog"></script>
   <script src="branch-check.js?v=20261110-clean"></script>
   <script src="menu-requests.js?v=20261110-reported"></script>
