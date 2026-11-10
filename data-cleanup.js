@@ -100,7 +100,11 @@ function downloadCleanupBackup() {
 }
 // The screen shows dates as dd/mm/yyyy, so accept the typed confirmation in either dd/mm/yyyy or yyyy-mm-dd.
 function cleanupConfirmValue() {
-  return $w('cleanupConfirmText').value.trim().replace(/(\d{1,2})\/(\d{1,2})\/(\d{4})/g,(_,d,m,y)=>`${y}-${m.padStart(2,'0')}-${d.padStart(2,'0')}`).replace(/\s+/g,' ');
+  const text=$w('cleanupConfirmText').value.trim().replace(/(\d{1,2})\/(\d{1,2})\/(\d{4})/g,(_,d,m,y)=>`${y}-${m.padStart(2,'0')}-${d.padStart(2,'0')}`);
+  // A date range may be typed with ถึง, a dash, "to" or just spaces between the two dates.
+  const dates=text.match(/\d{4}-\d{2}-\d{2}/g);
+  if(cleanupPlan?.range&&dates?.length===2)return `${dates[0]} ถึง ${dates[1]}`;
+  return text.replace(/\s+/g,' ');
 }
 function updateCleanupConfirmation() {
   $w('cleanupDelete').disabled=bomCloud.member?.role!=='admin'||cleanupBusy||!cleanupPlan||!cleanupAffected(cleanupPlan).length||!cleanupBackupRequested||!$w('cleanupBackupConfirmed').checked||cleanupConfirmValue()!==cleanupPlan.period;
