@@ -98,8 +98,12 @@ function downloadCleanupBackup() {
   document.body.appendChild(link);link.click();link.remove();setTimeout(()=>URL.revokeObjectURL(url),30000);
   cleanupBackupRequested=true;$w('cleanupBackupConfirmed').disabled=false;updateCleanupConfirmation();
 }
+// The screen shows dates as dd/mm/yyyy, so accept the typed confirmation in either dd/mm/yyyy or yyyy-mm-dd.
+function cleanupConfirmValue() {
+  return $w('cleanupConfirmText').value.trim().replace(/(\d{1,2})\/(\d{1,2})\/(\d{4})/g,(_,d,m,y)=>`${y}-${m.padStart(2,'0')}-${d.padStart(2,'0')}`).replace(/\s+/g,' ');
+}
 function updateCleanupConfirmation() {
-  $w('cleanupDelete').disabled=bomCloud.member?.role!=='admin'||cleanupBusy||!cleanupPlan||!cleanupAffected(cleanupPlan).length||!cleanupBackupRequested||!$w('cleanupBackupConfirmed').checked||$w('cleanupConfirmText').value.trim()!==cleanupPlan.period;
+  $w('cleanupDelete').disabled=bomCloud.member?.role!=='admin'||cleanupBusy||!cleanupPlan||!cleanupAffected(cleanupPlan).length||!cleanupBackupRequested||!$w('cleanupBackupConfirmed').checked||cleanupConfirmValue()!==cleanupPlan.period;
 }
 async function deleteCleanupPeriod() {
   updateCleanupConfirmation();if($w('cleanupDelete').disabled)return;
