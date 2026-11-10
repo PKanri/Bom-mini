@@ -216,7 +216,8 @@
             <label>ต่อ 1 หน่วยรายงาน<input id="criticalOutFactor" type="number" value="1" readonly tabindex="-1" class="block border rounded p-2 w-24 bg-slate-100"></label>
           </div></fieldset>
           <label><input id="criticalEnabled" type="checkbox" checked> ติดตามเป็นวัตถุดิบสำคัญ</label>
-          <button onclick="saveCriticalProduct()" class="bg-emerald-600 text-white rounded-lg p-2">บันทึกการตั้งค่า</button>
+          <button id="criticalSaveButton" onclick="saveCriticalProduct()" class="bg-emerald-600 text-white rounded-lg p-2">บันทึกการตั้งค่า</button>
+          <span id="criticalSaveStatus" role="status" aria-live="polite" class="text-sm font-semibold self-center"></span>
         </div>
         <p id="criticalExample" role="status" class="rounded-lg bg-slate-50 p-3 text-sm text-slate-600">เลือกวัตถุดิบเพื่อดูการตั้งค่าที่ใช้อยู่</p>
         </fieldset>
@@ -2398,14 +2399,14 @@
   <script src="vendor/xlsx.full.min.js"></script>
   <script src="ponn-template.js?v=20261105-recipe-120g"></script>
   <script src="supabase-config.js"></script>
-  <script src="workflow.js?v=20261106-fresh"></script>
+  <script src="workflow.js?v=20261110-link4"></script>
   <script src="count-units.js?v=20261105-recipe-120g"></script>
   <script src="supabase-store.js?v=20261106-theme"></script>
   <script src="data-cleanup.js?v=20261023-dialog"></script>
   <script src="data-restore.js?v=20261023-dialog"></script>
-  <script src="branch-check.js?v=20261105-diff-positive-blue"></script>
-  <script src="menu-requests.js?v=20261109-purge"></script>
-  <script src="branch-bom-usage.js?v=20261109-order"></script>
+  <script src="branch-check.js?v=20261110-units"></script>
+  <script src="menu-requests.js?v=20261110-shared"></script>
+  <script src="branch-bom-usage.js?v=20261110-shared"></script>
   <script src="stock-overview.js?v=20261026-black-grid"></script>
   <script src="critical-layout.js?v=20261025"></script>
   <dialog id="materialMasterDialog" class="ponn-dialog" aria-label="แก้ไขข้อมูลวัตถุดิบหลัก" oncancel="if(masterSaving)event.preventDefault()">
@@ -2422,9 +2423,9 @@
       <div class="ponn-dialog-actions"><button type="button" onclick="document.getElementById('materialMasterDialog').close()">ยกเลิก</button><button type="submit" class="ponn-dialog-ok">บันทึก</button></div>
     </fieldset><p id="masterStatus" role="status" class="text-sm text-rose-600"></p></form>
   </dialog>
-  <script src="material-master.js?v=20261105-auto-track"></script>
+  <script src="material-master.js?v=20261110-link"></script>
   <script src="date-display.js?v=20261103-dmy"></script>
-  <script src="report-details.js?v=20261109-mastername"></script>
+  <script src="report-details.js?v=20261110-units"></script>
   <script src="data-freshness.js?v=20261106-fresh3"></script>
 </body>
 </html>

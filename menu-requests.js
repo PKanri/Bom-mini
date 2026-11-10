@@ -20,6 +20,16 @@
     try { if (typeof window.renderBranchBomUsage === 'function') window.renderBranchBomUsage(true); } catch (e) { /* informational */ }
   };
 
+  // Codes that ANY branch already attached photos to (codes only, no images). Needs bom_menu_codes_with_images() from the SQL file.
+  state.imagedCodes = new Set();
+  async function loadImagedCodes() {
+    if (role() !== 'branch') { state.imagedCodes = new Set(); return; }
+    try {
+      const codes = await cloudRequest('/rest/v1/rpc/bom_menu_codes_with_images', { method: 'POST', body: '{}' });
+      state.imagedCodes = new Set((Array.isArray(codes) ? codes : []).map(c => typeof c === 'string' ? c : Object.values(c || {})[0]).filter(Boolean));
+    } catch (e) { /* SQL not updated yet: behave as before */ }
+  }
+  state.othersHaveImages = code => state.imagedCodes.has(code) && state.imageCount(code) === 0;
   async function load() {
     if (typeof bomCloud === 'undefined' || !bomCloud.member) return;
     if (state.loading) return state.loading;
@@ -27,6 +37,7 @@
       try {
         state.list = await cloudRequest('/rest/v1/bom_menu_requests?select=code,branch,name,qty,source_file,report_date,reason,requested_at,image_count&order=requested_at.desc&limit=2000');
         state.error = ''; state.loaded = true;
+        await loadImagedCodes();
       } catch (e) { state.error = friendly(e); }
       finally { state.loading = null; }
     })();
@@ -53,6 +64,7 @@
         image_count: Array.isArray(i.images) ? i.images.length : (old ? old.image_count || 0 : 0) });
       if (Array.isArray(i.images)) state.drafts.delete(i.code);
     }
+    await loadImagedCodes();
     return clean.length;
   }
 
@@ -96,6 +108,7 @@
     catch (e) { throw Error(friendly(e)); }
     const row = state.list.find(r => r.code === code && r.branch === bomCloud.member.branch);
     if (row) row.image_count = images.length;
+    await loadImagedCodes();
   }
 
   // Photos are loaded only when someone opens them. Admin gets every branch that attached some; a branch gets its own.

@@ -106,6 +106,7 @@
     if (!modal) return;
     const m = modal, rq = window.menuRequests, max = rq.maxImages || 3, dis = m.busy ? ' disabled' : '';
     const edit = m.mode === 'edit';
+    const others = !edit && !m.images.length && rq.othersHaveImages && rq.othersHaveImages(m.code);
     const thumbs = m.images.map((src, i) => `<div style="position:relative"><img src="${E(src)}" alt="รูปที่ ${i + 1}" style="width:112px;height:112px;object-fit:cover;border-radius:10px;border:1px solid var(--b3,#c6d1e3);background:#fff;display:block"><button type="button" data-mrm="${i}"${dis} aria-label="ลบรูปที่ ${i + 1}" style="position:absolute;top:-8px;right:-8px;width:24px;height:24px;border-radius:50%;border:1px solid var(--b3,#c6d1e3);background:var(--surface,#fff);color:var(--t800,#182841);font-size:12px;cursor:pointer">✕</button></div>`).join('');
     const add = m.images.length < max ? `<button type="button" data-madd${dis} style="width:112px;height:112px;border:2px dashed var(--b3,#c6d1e3);border-radius:10px;background:var(--surface-2,#f6f8fc);color:var(--t700,#2a3c58);font-size:13px;cursor:pointer;line-height:1.5">📎<br>เลือกรูป /<br>ถ่ายรูป</button>` : '';
     $('bmBody').innerHTML = `
@@ -115,9 +116,11 @@
         <div style="font-weight:700">${E(m.name)}</div>
         <div style="font-size:13px;margin-top:2px">จำนวนขายในไฟล์ <b>${num(m.qty)}</b>${m.kind === 'none' ? '' : ' · <span style="opacity:.8">' + E(m.reason) + '</span>'}</div>
       </div>
-      <div style="font-weight:700">แนบรูปสูตร <span style="font-weight:400;opacity:.7">(ไม่บังคับ · สูงสุด ${max} รูป)</span></div>
-      <div style="font-size:12px;opacity:.7;margin:2px 0 8px">ถ่ายหรือเลือกรูปใบสูตรของเมนูนี้ให้เห็นวัตถุดิบและปริมาณชัดเจน เหมือนใบสูตรมาตรฐานที่ใช้อยู่</div>
-      <div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:8px;min-height:30px">${m.loading ? '<span style="font-size:13px;opacity:.7">กำลังโหลดรูปที่แนบไว้…</span>' : thumbs + add}</div>
+      <div style="font-weight:700${others ? ';display:none' : ''}">แนบรูปสูตร <span style="font-weight:400;opacity:.7">(ไม่บังคับ · สูงสุด ${max} รูป)</span></div>
+      <div style="font-size:12px;opacity:.7;margin:2px 0 8px${others ? ';display:none' : ''}">ถ่ายหรือเลือกรูปใบสูตรของเมนูนี้ให้เห็นวัตถุดิบและปริมาณชัดเจน เหมือนใบสูตรมาตรฐานที่ใช้อยู่</div>
+      <div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:8px;min-height:30px${others ? ';display:none' : ''}">${m.loading ? '<span style="font-size:13px;opacity:.7">กำลังโหลดรูปที่แนบไว้…</span>' : thumbs + add}</div>
+      ${others ? '<div style="margin:8px 0;padding:9px 12px;border-radius:10px;border:1px solid #16a34a;background:rgba(22,163,74,.12);font-size:13px;line-height:1.5">✓ มีสาขาอื่นแนบรูปสูตรของเมนูนี้ไว้แล้ว ไม่ต้องแนบรูปซ้ำ กดยืนยันเพื่อแจ้ง Admin ได้เลย</div>' : ''}
+      ${!edit && !others && !m.loading && !m.images.length ? '<div style="margin:8px 0;padding:9px 12px;border-radius:10px;border:1px solid #f59e0b;background:rgba(245,158,11,.14);font-size:13px;line-height:1.5">⚠️ ยังไม่ได้แนบรูปสูตร แจ้ง Admin ได้เลย แต่ต้องกลับมาแนบรูปภายหลัง (กด “📎 แนบรูปสูตรเพิ่ม” ที่แถวของเมนูนี้) เพื่อให้ Admin เพิ่มสูตรได้เร็วขึ้น</div>' : ''}
       <div role="status" style="font-size:13px;min-height:20px;${m.error ? 'color:var(--rose-t600,#e11d48)' : 'opacity:.8'}">${E(m.error || m.status || '')}</div>
       <div style="display:flex;justify-content:flex-end;gap:10px;margin-top:14px">
         <button type="button" data-mcancel${dis} style="color:inherit;background:transparent;border:1px solid var(--b3,#c6d1e3);border-radius:10px;padding:9px 18px">ยกเลิก</button>
@@ -183,7 +186,13 @@
         await rq.report([item], ctx);
         notice = '✓ แจ้ง Admin เรื่อง ' + m.code + ' แล้ว' + (m.images.length ? ' พร้อมรูปสูตร ' + m.images.length + ' รูป' : '') + ' ระบบจะนำไปแสดงในหน้า 2 ของ Admin';
       }
+      const needImages = m.mode !== 'edit' && !m.images.length && !(rq.othersHaveImages && rq.othersHaveImages(m.code));
       closeModal(); render(true);
+      if (needImages) {
+        notice += ' · ⚠️ ยังไม่ได้แนบรูป กรุณากลับมาแนบรูปสูตรภายหลัง';
+        render(true);
+        if (typeof appAlert === 'function') appAlert('แจ้ง Admin เรื่อง ' + m.code + ' แล้ว แต่ยังไม่ได้แนบรูปสูตร กรุณากลับมาแนบรูปภายหลัง โดยกด “📎 แนบรูปสูตรเพิ่ม” ที่แถวของเมนูนี้');
+      }
     } catch (e) {
       if (modal === m) { m.busy = false; m.status = ''; m.error = (m.mode === 'edit' ? 'บันทึกรูปไม่สำเร็จ: ' : 'แจ้งไม่สำเร็จ: ') + e.message; paintModal(); }
     }
@@ -193,6 +202,7 @@
     if (!reportable(m)) return '<span class="bu-sub">—</span>';
     if (!reported(m.code)) return `<button type="button" class="bu-send" data-bunotify="${E(m.code)}">🔔 แจ้ง Admin</button>`;
     const n = window.menuRequests ? window.menuRequests.imageCount(m.code) : 0;
+    if (!n && window.menuRequests && window.menuRequests.othersHaveImages(m.code)) return `<div style="display:flex;flex-direction:column;align-items:flex-end;gap:4px"><span class="bu-badge bu-blue">✓ แจ้งแล้ว</span><span class="bu-sub">🖼️ มีสาขาแนบรูปสูตรแล้ว</span></div>`;
     return `<div style="display:flex;flex-direction:column;align-items:flex-end;gap:4px"><span class="bu-badge bu-blue">✓ แจ้งแล้ว</span><button type="button" class="bu-link" data-buedit="${E(m.code)}">${n ? '📎 ' + n + ' รูป · ดู/แก้ไข' : '📎 แนบรูปสูตรเพิ่ม'}</button></div>`;
   }
   function bodyHtml(model) {

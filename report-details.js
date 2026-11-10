@@ -8,8 +8,9 @@ function showBranchReportDetails(index,field) {
 function openCalculationDetails(source,field,files) {
   const titles=files?{in:'itec in + เครื่องดื่ม in',out:'itec out',bom:'ใช้ตาม BOM'}:{in:'รับเข้า',out:'จ่ายออก',waste:'สูญเสีย',bom:'ตัดตามสูตร BOM'};
   if(!source||!titles[field])return;
-  const row=files?source:reportDisplayRow(source);
-  const factor=files?1:countUnits(workflow.settings[source.code],source.code)[0]?.factor||1;
+  // Same presentation on page 4 and page 5: totals and units follow the material's main counting unit.
+  const row=reportDisplayRow(source);
+  const factor=countUnits(workflow.settings[source.code]||{unit:source.unit},source.code)[0]?.factor||1;
   const excelRows=new Map();
   if(files){
     for(const [type,file] of Object.entries(files)){

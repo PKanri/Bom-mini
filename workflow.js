@@ -363,6 +363,13 @@ function receiptFactor(code,setting) {
   const units=countUnits(setting||{},code);
   return units.find(unit=>unit.label==='กรัม')?.factor ?? units[0].factor/600;
 }
+// Keep the stored receipt factor equal to the value the calculation really uses (salmon: grams unit of the master data).
+function syncReceiptFactor(code) {
+  const setting=workflow.settings[code];
+  if(code!==salmonReceiptCode||!setting)return;
+  const factor=receiptFactor(code,setting);
+  if(Number.isFinite(factor)&&factor>0)setting.inFactor=factor;
+}
 function renderCriticalSettings() {
   $w('criticalListSummary').textContent='ดูรายการที่ติดตาม ('+Object.values(workflow.settings).filter(s=>s.critical).length+' รายการ)';
   const select = $w('criticalProduct'), previous=select.value;
@@ -437,7 +444,7 @@ function selectCriticalProduct() {
     : 'สินค้านี้ยังไม่มีหน่วย กรุณาเลือกจากรายการ หากไม่มี ให้เพิ่มวัตถุดิบใน Master Data ก่อน';
   const code=$w('criticalProduct').value;
   $w('criticalInLabel').textContent=code===salmonReceiptCode?'จำนวนกรัมในไฟล์':'กี่หน่วยในไฟล์';
-  $w('criticalInSourceQty').readOnly=code===salmonReceiptCode;
+  $w('criticalInSourceQty').readOnly=false;
   $w('criticalInSame').hidden=code===salmonReceiptCode;
   for (const [direction,key] of [['In','inFactor'],['Out','outFactor']]) {
     const ratio=criticalFactorRatio((direction==='In'?receiptFactor(code,s):s?.[key])/main.factor);
@@ -446,7 +453,19 @@ function selectCriticalProduct() {
   }
   updateCriticalExample();
 }
+let criticalSaveTimer=0;
+function criticalSaveNotice(text,tone) {
+  const el=$w('criticalSaveStatus'),button=$w('criticalSaveButton');
+  clearTimeout(criticalSaveTimer);
+  if(button)button.disabled=tone==='busy';
+  if(!el)return;
+  el.textContent=text;
+  el.classList.remove('text-slate-600','text-emerald-700','text-red-600');
+  el.classList.add(tone==='ok'?'text-emerald-700':tone==='error'?'text-red-600':'text-slate-600');
+  if(tone==='ok')criticalSaveTimer=setTimeout(()=>{el.textContent='';},5000);
+}
 async function saveCriticalProduct() {
+  criticalSaveNotice('','');
   const code=$w('criticalProduct').value;
   const material=appState.materials.find(m=>m.code===code);
   const unit=material?.baseUnit || workflow.settings[code]?.unit || $w('criticalUnit').value.trim();
@@ -459,11 +478,29 @@ async function saveCriticalProduct() {
   if (old && old.unit!==unit && Object.values(workflow.counts).some(c=>c[code]!=null)) { appAlert('วัตถุดิบนี้มียอดนับแล้ว ไม่สามารถเปลี่ยนหน่วยฐานได้'); return; }
   const before=structuredClone(workflow), materialsBefore=structuredClone(appState.materials);
   workflow.settings[code]={...old,name,unit,inFactor,outFactor,cost,critical:$w('criticalEnabled').checked};
+  if(code===salmonReceiptCode) {
+    // Grams per report unit is the master-data ratio: update the gram unit so every page follows it.
+    const grams=Number($w('criticalInSourceQty').value),units=countUnits(workflow.settings[code],code),gi=units.findIndex(u=>u.label==='กรัม');
+    if(Number.isFinite(grams)&&grams>0&&gi>0) {
+      units[gi].factor=main.factor/grams;
+      workflow.settings[code].countUnits=units;
+      if(existing&&existing.subUnit==='กรัม')existing.subFactor=units[gi].factor;
+    }
+  }
+  syncReceiptFactor(code);
   if (existing) {
     if (existing.baseUnit!==unit && appState.recipes.some(r=>r.items.some(i=>i.materialId===existing.id))) { workflow=before; appAlert('หน่วยฐานไม่ตรงกับสูตร BOM เดิม กรุณาใช้หน่วยเดียวกัน'); return; }
     existing.costPerBase=cost??0;
   } else appState.materials.push({id:'source-'+code,code,name,category:'วัตถุดิบสำคัญ',baseUnit:unit,mainUnit:unit,mainFactor:1,subUnit:unit,subFactor:1,costPerBase:cost??0});
-  try { await storeWorkflow(); renderCriticalSettings(); renderBomModule(); } catch(error) {workflow=before;appState.materials=materialsBefore;storageError(error);}
+  criticalSaveNotice('กำลังบันทึก…','busy');
+  try { await storeWorkflow(); renderCriticalSettings(); renderBomModule(); refreshUnitDependentViews(); criticalSaveNotice('✓ บันทึกแล้ว','ok'); } catch(error) {workflow=before;appState.materials=materialsBefore;criticalSaveNotice('บันทึกไม่สำเร็จ','error');storageError(error);}
+  finally {const button=$w('criticalSaveButton');if(button)button.disabled=false;}
+}
+// Pages 3-6 show quantities converted with these settings, so redraw them after the settings change.
+function refreshUnitDependentViews() {
+  for(const name of ['renderStockCountTable','renderVarianceDashboard','renderBranchCheck','renderStockOverview']) {
+    try{if(typeof window[name]==='function')window[name]();}catch(error){console.error(name,error);}
+  }
 }
 function criticalEntries() {return Object.entries(workflow.settings).filter(([,s])=>s.critical);}
 function recipeUnits(mat){

@@ -40,6 +40,7 @@ async function saveMaterialMaster(){
     rememberCountDraft();
     Object.assign(mat,{code,name,mainUnit:main,mainFactor:factor,subUnit:sub,subFactor:sub?factor/ratio:1});
     workflow.settings[code]={...setting,name,subUnit:sub,countUnits:units};
+    if(typeof syncReceiptFactor==='function')syncReceiptFactor(code);
     await storeWorkflow();
   }catch(e){Object.assign(mat,previous);workflow.settings=settings;status.textContent='บันทึกไม่สำเร็จ: '+e.message;return;}
   finally{masterSaving=false;$w('masterFields').disabled=false;}

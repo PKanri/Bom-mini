@@ -239,8 +239,9 @@ function calculateBranchCheck() {
   try{
     const scope=branchCheckScope(),rows=branchCheckModel(scope);
     branchCheckState.rows=rows;
-    rows.forEach((r,index)=>{
-      const d=stockDifference(r);
+    // Quantities are calculated in base units; show them in the same counting unit as page 4 and the count inputs.
+    rows.forEach((base,index)=>{
+      const r=reportDisplayRow(base),d=stockDifference(r);
       for(const field of ['in','out','bom']){
         const cell=$w(`bc-${field}-${index}`);
         cell.innerHTML=`<button type="button" class="report-detail-number" onclick="showBranchReportDetails(${index},'${field}')" aria-label="ดูรายละเอียด${field==='bom'?'ใช้ตาม BOM':field==='in'?'รับเข้า':'จ่ายออก'}">${fmt(r[field])}</button>`;
@@ -271,7 +272,7 @@ function renderBranchCheck() {
         const values=branchCheckState.counts[code]?.[field]??branchCheckValues(scope,code,s,field);
         return specs.map((u,part)=>`<label class="bc-count">${esc(u.label)}<input ${field==='actual'||field==='opening'?`data-branch-count="${field}" onkeydown="handleBranchCountTab(event,'${field}')"`:''} aria-label="${esc(s.name+' '+field+' '+u.label)}" type="number" min="0" step="any" placeholder="${field==='waste'?'0':'ยังไม่นับ'}" value="${esc(values[part]??'')}" oninput="branchCheckInput(${index},'${field}',${part},this.value)"></label>`).join('');
       };
-      return `<tr><td><strong>${esc(s.name)}</strong><small>${esc(code)} · รายงานเป็น ${esc(s.unit)}</small></td><td>${inputs('opening')}</td><td id="bc-in-${index}" data-result></td><td id="bc-out-${index}" data-result></td><td id="bc-bom-${index}" data-result></td><td>${inputs('waste')}</td><td id="bc-theory-${index}" data-result></td><td>${inputs('actual')}</td><td id="bc-diff-${index}" data-result></td></tr>`;
+      return `<tr><td><strong>${esc(s.name)}</strong><small>${esc(code)} · รายงานเป็น ${esc(units[0]?.label||s.unit)}</small></td><td>${inputs('opening')}</td><td id="bc-in-${index}" data-result></td><td id="bc-out-${index}" data-result></td><td id="bc-bom-${index}" data-result></td><td>${inputs('waste')}</td><td id="bc-theory-${index}" data-result></td><td>${inputs('actual')}</td><td id="bc-diff-${index}" data-result></td></tr>`;
     }).join('');
     calculateBranchCheck();
     renderBranchFileDetails();
@@ -308,7 +309,7 @@ function exportBranchCheck() {
   calculateBranchCheck();
   if(!branchCheckState.rows.length)return;
   const scope=branchCheckScope(),book=XLSX.utils.book_new();
-  const rows=branchCheckState.rows.map(r=>({วันที่:scope.date,สาขา:scope.branch,รหัส:r.code,วัตถุดิบ:r.name,หน่วย:r.unit,ยกมา:r.opening??'',รับเข้า:r.in,จ่ายออก:r.out,ใช้ตามสูตร:r.bom,สูญเสีย:r.waste,ควรเหลือ:r.theory??'',นับจริง:r.actual??'',ผลต่าง:stockDifference(r).qty??'',สถานะ:r.ready?'ตรวจแล้ว':r.issues.join(' / '),ประเภท:'ผลตรวจจากไฟล์สาขา (ไฟล์เคลื่อนไหวใช้ตรวจในหน้านี้)'}));
+  const rows=branchCheckState.rows.map(reportDisplayRow).map(r=>({วันที่:scope.date,สาขา:scope.branch,รหัส:r.code,วัตถุดิบ:r.name,หน่วย:r.unit,ยกมา:r.opening??'',รับเข้า:r.in,จ่ายออก:r.out,ใช้ตามสูตร:r.bom,สูญเสีย:r.waste,ควรเหลือ:r.theory??'',นับจริง:r.actual??'',ผลต่าง:stockDifference(r).qty??'',สถานะ:r.ready?'ตรวจแล้ว':r.issues.join(' / '),ประเภท:'ผลตรวจจากไฟล์สาขา (ไฟล์เคลื่อนไหวใช้ตรวจในหน้านี้)'}));
   XLSX.utils.book_append_sheet(book,XLSX.utils.json_to_sheet(rows),'ตรวจสิ้นวัน');
   XLSX.writeFile(book,`ตรวจสิ้นวัน_${scope.branch}_${scope.date}.xlsx`);
 }
