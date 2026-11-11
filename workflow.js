@@ -768,7 +768,14 @@ function buildReport(branch,start,end,source=workflow,allowCentralCoverage=true,
     const rowIssues=new Set(issues), first=availableOnly?fallback?.count:source.counts[countKey(branch,priorDay(start))]?.[code], last=source.counts[countKey(branch,effectiveEnd)]?.[code];
     if(!Number.isFinite(receiptFactor(code,s))||receiptFactor(code,s)<=0||!Number.isFinite(s.outFactor)||s.outFactor<=0)rowIssues.add('รหัสใหม่ตามรายการ: รอตรวจอัตราแปลงรับเข้า/จ่ายออก');
     if(typeof COUNT_UNIT_LIST!=='undefined' && ['RM-101-0256','RM-101-0290','RM-102-0069'].includes(code) && !appState.recipes.some(r=>r.items.some(i=>appState.materials.find(m=>m.id===i.materialId)?.code===code)))rowIssues.add('รอผูกสูตรกับรหัสวัตถุดิบนี้');
-    const opening=first?.unitReview?undefined:first?.qty,actual=last?.unitReview?undefined:last?.qty;
+    let opening=first?.unitReview?undefined:first?.qty,actual=last?.unitReview?undefined:last?.qty;
+    // Page 4 (availableOnly): a count the branch never entered means none on hand, so use 0.
+    // Counts flagged unitReview stay blocked because their quantity is unreliable.
+    let openingAssumed=false,actualAssumed=false;
+    if(availableOnly){
+      if(opening==null&&!first?.unitReview){opening=0;openingAssumed=true;}
+      if(actual==null&&!last?.unitReview){actual=0;actualAssumed=true;}
+    }
     let waste=0;
     dates.forEach(date=>{const count=source.counts[countKey(branch,date)]?.[code];if(!count||count.qty==null||count.unitReview){if(!availableOnly)rowIssues.add('รอข้อมูลตรวจนับ/สูญเสียรายวันให้ครบ');}else {
       const amount=count.waste||0;waste+=amount;
@@ -778,7 +785,7 @@ function buildReport(branch,start,end,source=workflow,allowCentralCoverage=true,
     if (actual==null && !availableOnly) rowIssues.add(`รอยอดนับปลายวัน ${end}`);
     const t=totals.get(code), ready=rowIssues.size===0, theory=ready?opening+t.in-t.out-waste-t.bom:null;
     const actualUsed=ready&&actual!=null?opening+t.in-t.out-waste-actual:null, overuse=actualUsed!=null?actualUsed-t.bom:null;
-    return {branch,code,name:s.name,unit:s.unit,start,end,openingDate,effectiveEnd,availableOnly,opening,actual,...t,waste,ready,theory,actualUsed,overuse,issues:[...rowIssues]};
+    return {branch,code,name:s.name,unit:s.unit,start,end,openingDate,effectiveEnd,availableOnly,opening,actual,openingAssumed,actualAssumed,...t,waste,ready,theory,actualUsed,overuse,issues:[...rowIssues]};
   });
 }
 let latestReport=[];
@@ -840,13 +847,13 @@ function reportRowsHtml(rows,withDate) {
     const pct=d.pct==null?'':(d.pct>0?'+':'')+d.pct.toLocaleString('th-TH',{maximumFractionDigits:1})+'%';
     return `<tr class="stock-result-row">${withDate?'<td class="p-3 whitespace-nowrap">'+r.end+'</td>':''}
       <td class="p-3"><strong>${esc(r.name)}</strong><br><small class="text-slate-400">${esc(r.code)}</small><br><small class="text-slate-500">${esc(workflow.branches[r.branch]||r.branch)} (${esc(r.branch)})</small></td>
-      <td class="p-3 text-right whitespace-nowrap">${fmt(r.opening)} ${esc(r.unit)}${r.availableOnly?'<br><small class="text-slate-500">ยอดบันทึก '+esc(r.openingDate)+'</small>':''}</td>
+      <td class="p-3 text-right whitespace-nowrap">${fmt(r.opening)} ${esc(r.unit)}${r.openingAssumed?'<br><small class="text-slate-500">ไม่ได้นับ (คิดเป็น 0)</small>':r.availableOnly?'<br><small class="text-slate-500">ยอดบันทึก '+esc(r.openingDate)+'</small>':''}</td>
       <td class="p-3 text-right stock-in"><button type="button" class="report-detail-number" onclick="showReportDetails(${rowIndex},'in')" aria-label="ดูรายละเอียดรับเข้า">${signed(r.in,'+')}</button></td>
       <td class="p-3 text-right stock-out"><button type="button" class="report-detail-number" onclick="showReportDetails(${rowIndex},'out')" aria-label="ดูรายละเอียดจ่ายออก">${signed(r.out,'−')}</button></td>
       <td class="p-3 text-right stock-out"><button type="button" class="report-detail-number" onclick="showReportDetails(${rowIndex},'waste')" aria-label="ดูรายละเอียดสูญเสีย">${signed(r.waste,'−')}</button></td>
       <td class="p-3 text-right stock-bom"><button type="button" class="report-detail-number" onclick="showReportDetails(${rowIndex},'bom')" aria-label="ดูรายละเอียดตัดตามสูตร">${signed(r.bom,'−')}</button></td>
       <td class="p-3 text-right stock-theory">${fmt(r.theory)}</td>
-      <td class="p-3 text-right stock-actual">${fmt(r.actual)}${r.availableOnly&&r.actual!=null?'<br><small class="text-slate-500">'+esc(r.effectiveEnd)+'</small>':''}</td>
+      <td class="p-3 text-right stock-actual">${fmt(r.actual)}${r.actualAssumed?'<br><small class="text-slate-500">ไม่ได้นับ (คิดเป็น 0)</small>':r.availableOnly&&r.actual!=null?'<br><small class="text-slate-500">'+esc(r.effectiveEnd)+'</small>':''}</td>
       <td class="p-3 text-right whitespace-nowrap stock-diff-${d.tone}">${d.qty==null?'—':(d.qty>0?'+':'')+fmt(d.qty)+' '+esc(r.unit)}</td>
       <td class="p-3">${varianceBarHtml(d)}</td><td class="p-3"><span class="stock-badge stock-badge-${d.tone}">${d.label}${pct?' ('+pct+')':''}</span>${!r.ready?'<div class="stock-issues">'+esc(r.issues.join(' / '))+'</div>':r.actual==null?'<div class="stock-issues">ยังไม่มียอดนับจริงสำหรับเทียบผลต่าง</div>':d.pct==null?'<div class="stock-issues">BOM เป็น 0 จึงคำนวณ % ไม่ได้</div>':''}</td></tr>`;
   }).join('')||`<tr><td colspan="${withDate?12:11}" class="p-6">ยังไม่มีข้อมูลสำหรับรายงาน</td></tr>`;
