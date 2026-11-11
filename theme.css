@@ -165,7 +165,9 @@ html #tab-count.count-mobile .count-entry-table td:nth-child(4){background:var(-
 html #tab-count.count-mobile .count-mobile-save{background:color-mix(in srgb,var(--surface) 93%,transparent);border-color:var(--b2)}
 html .count-mobile-save button{background:var(--acc-solid)}
 
-html .import-modes label:has(:checked){background:var(--surface);color:var(--acc-t800);box-shadow:0 1px 3px rgba(15,27,45,.2)}
+html .import-modes{background:var(--surface-3)}
+html .import-modes label{color:var(--t700)}
+html .import-modes label:has(:checked){background:var(--surface);color:var(--acc-t800);box-shadow:0 1px 3px rgba(15,27,45,.2);font-weight:700}
 html .import-days .import-period,html .import-date-list small{color:var(--t600)}
 html .import-days input{accent-color:var(--acc-solid)}
 html .import-date-list{border-color:var(--b2)}
@@ -220,3 +222,6 @@ html [style*="background:white"],html [style*="background:#fff"]{background:var(
 html [style*="border:1px solid #cbd5e1"]{border-color:var(--b3)!important}
 html[data-theme="dark"] [style*="background:#dcfce7"]{background:var(--badge-eq-bg)!important;color:var(--badge-eq-t)!important}
 html input[type="checkbox"],html input[type="radio"]{accent-color:var(--acc-solid)}
+
+/* read-only fields (e.g. material code in the edit dialog) */
+html .read-only\:bg-slate-100:read-only{background-color:var(--surface-3);color:var(--t500)}
